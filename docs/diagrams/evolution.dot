@@ -1,0 +1,41 @@
+digraph evolution {
+  rankdir=TB;
+  compound=true;
+  bgcolor="white";
+  nodesep=1.05; ranksep=0.80;
+  node [shape=box, style="filled", fillcolor="#eef1f6", color="#5a6472",
+        penwidth=1.4, fontname="Arial", fontsize=11, margin="0.20,0.14"];
+  edge [color="#6b7585", penwidth=1.3, arrowsize=0.8,
+        fontname="Arial", fontsize=9.5, fontcolor="#44506180"];
+
+  s1 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="2">
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="8" COLOR="#7a8697">STAGE 1</FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>One-shot query generation</B></TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="9.5" COLOR="#445061">One pandas expression<BR ALIGN="LEFT"/>generated per question<BR ALIGN="LEFT"/></FONT></TD></TR>
+      </TABLE>>];
+
+  s2 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="2">
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="8" COLOR="#7a8697">STAGE 2</FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>Tool-calling agent</B></TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="9.5" COLOR="#445061">Conversation history,<BR ALIGN="LEFT"/>named tools, scoped edits<BR ALIGN="LEFT"/></FONT></TD></TR>
+      </TABLE>>];
+
+  s3 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="2">
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="8" COLOR="#7a8697">STAGE 3 &#183; BUILT AND VERIFIED</FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>Workspace</B></TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="9.5" COLOR="#445061">Data in view, agent beside it,<BR ALIGN="LEFT"/>edits confirmed by diff<BR ALIGN="LEFT"/></FONT></TD></TR>
+      </TABLE>>, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2.0];
+
+  s4 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="2">
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="8" COLOR="#7a8697">STAGE 4 &#183; DECIDED TODAY</FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>Stateless services</B></TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="9.5" COLOR="#445061">Shared stores, many workers,<BR ALIGN="LEFT"/>ownership and identity<BR ALIGN="LEFT"/></FONT></TD></TR>
+      </TABLE>>, fillcolor="#e6dbf7", color="#6b3fb0", penwidth=2.0, style="filled,dashed"];
+
+  s1 -> s2 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0"><TR><TD><FONT COLOR="#b0392f"><B>could not do</B></FONT></TD></TR><TR><TD><FONT COLOR="#445061">&#8220;fix it&#8221; &#8212; no memory<BR/>of the previous answer</FONT></TD></TR></TABLE>>];
+  s2 -> s3 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0"><TR><TD><FONT COLOR="#b0392f"><B>could not show</B></FONT></TD></TR><TR><TD><FONT COLOR="#445061">a sentence claiming<BR/>138 rows is not proof</FONT></TD></TR></TABLE>>];
+  s3 -> s4 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0"><TR><TD><FONT COLOR="#b0392f"><B>cannot scale</B></FONT></TD></TR><TR><TD><FONT COLOR="#445061">state inside one process<BR/>serves one user</FONT></TD></TR></TABLE>>];
+
+  {rank=same; s1; s2;}
+  {rank=same; s3; s4;}
+}

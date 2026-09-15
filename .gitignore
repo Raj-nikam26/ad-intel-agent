@@ -1,0 +1,33 @@
+# Environments
+.env
+.env.example
+venv/
+env/
+backend/venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.log
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.npm/
+
+# IDEs and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# App specific data
+backend/data/
+
+# Documentation and Notes (Ignore all docx and md, EXCEPT README.md)
+*.docx
+*.md
+!README.md

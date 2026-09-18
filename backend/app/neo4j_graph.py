@@ -63,7 +63,7 @@ def driver():
 
 
 def _ensure_schema(drv) -> None:
-    with drv.session() as s:
+    with drv.session(database=settings.neo4j_database or None) as s:
         try:
             s.run("CREATE CONSTRAINT node_key IF NOT EXISTS "
                   "FOR (n:Node) REQUIRE (n.dataset, n.type, n.name) IS UNIQUE")
@@ -173,7 +173,7 @@ def _mark(tx, ds: str, version: int) -> None:
 def sync_full(ds: str, version: int, df: pd.DataFrame, mapping: dict | None = None) -> None:
     mapping = mapping or infer_mapping(df)
     payload = _row_payload(df, mapping)
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         while s.run("MATCH (n:Node {dataset: $ds}) WITH n LIMIT 5000 DETACH DELETE n "
                     "RETURN count(*) AS c", ds=ds).single()["c"]:
             pass
@@ -188,7 +188,7 @@ def sync_rows(ds: str, version: int, df: pd.DataFrame, rows: list[int], mapping:
         return
     mapping = mapping or infer_mapping(df)
     payload = _row_payload(df.loc[df.index.intersection(rows)], mapping)
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         for i in range(0, len(rows), _BATCH):
             s.execute_write(_delete_rows, ds, rows[i:i + _BATCH])
         for i in range(0, len(payload), _BATCH):
@@ -199,13 +199,13 @@ def sync_rows(ds: str, version: int, df: pd.DataFrame, rows: list[int], mapping:
 
 
 def synced_version(ds: str) -> int | None:
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         rec = s.run("MATCH (d:Dataset {id: $ds}) RETURN d.version AS v", ds=ds).single()
         return rec["v"] if rec else None
 
 
 def counts(ds: str) -> dict:
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         return {
             "nodes": s.run("MATCH (n:Node {dataset: $ds}) RETURN count(n) AS c", ds=ds).single()["c"],
             "edges": s.run("MATCH (:Node {dataset: $ds})-[r:LINKED]->() RETURN count(r) AS c", ds=ds).single()["c"],
@@ -223,7 +223,7 @@ def entity_summary(ds: str, value: str) -> dict | None:
          [f IN collect(r.flags) | f] AS flag_lists
     RETURN s.column AS subject_column, size(rows) AS row_count, pairs, flag_lists
     """
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         rec = s.run(q, ds=ds, name=value).single()
     if rec is None:
         return None
@@ -257,7 +257,7 @@ def find_by_attributes(ds: str, criteria: dict[str, str]) -> list[str]:
     RETURN DISTINCT s.name AS name ORDER BY name
     """
     payload = [{"column": k, "value": v} for k, v in criteria.items()]
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         return [r["name"] for r in s.run(q, ds=ds, criteria=payload, needed=len(payload))]
 
 
@@ -276,7 +276,7 @@ def resolve_entity(ds: str, text: str, entity_type: str | None = None, limit: in
     RETURN node.name AS name, node.type AS type, node.column AS column, score
     ORDER BY score DESC LIMIT $limit
     """
-    with driver().session() as s:
+    with driver().session(database=settings.neo4j_database or None) as s:
         return [
             {"name": r["name"], "type": r["type"], "column": r["column"], "score": round(r["score"], 3)}
             for r in s.run(q, terms=terms, ds=ds, type=entity_type, limit=limit)

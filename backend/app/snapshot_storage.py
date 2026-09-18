@@ -47,10 +47,17 @@ class S3Snapshots:
             endpoint_url=settings.s3_endpoint_url,
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
+            region_name=settings.s3_region,
         )
-        existing = {b["Name"] for b in self.client.list_buckets().get("Buckets", [])}
-        if self.bucket not in existing:
-            self.client.create_bucket(Bucket=self.bucket)
+        # Create the bucket if it is missing. Providers that restrict bucket
+        # creation (or listing) through the S3 API expect it to be made in
+        # their dashboard first, so a refusal here is not fatal.
+        try:
+            existing = {b["Name"] for b in self.client.list_buckets().get("Buckets", [])}
+            if self.bucket not in existing:
+                self.client.create_bucket(Bucket=self.bucket)
+        except Exception:  # noqa: BLE001
+            pass
 
     @staticmethod
     def _key(session_id: str, version: int) -> str:

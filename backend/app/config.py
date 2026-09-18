@@ -38,11 +38,13 @@ class Settings(BaseSettings):
     s3_access_key: str = ""
     s3_secret_key: str = ""
     s3_bucket: str = "adintel-snapshots"
+    s3_region: str = "us-east-1"   # Supabase Storage requires the project region
 
     # Neo4j knowledge graph. Empty = in-process NetworkX graph.
     neo4j_uri: str = ""
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
+    neo4j_database: str = ""   # Aura names it after the instance id; empty = server default
 
     # Sign-in (Clerk). Off by default so the public demo needs no account.
     auth_enabled: bool = False

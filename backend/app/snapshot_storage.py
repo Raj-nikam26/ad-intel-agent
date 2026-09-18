@@ -5,16 +5,57 @@ Where each version's full dataframe is kept: local disk by default, or
 S3-compatible object storage (MinIO locally, S3/R2 in production).
 
 Format is gzip pickle, not Parquet - see data_store.py for why.
+
+Unpickling can run code, so a snapshot planted in the bucket by someone
+holding the storage keys would run on the server. With
+SNAPSHOT_SIGNING_KEY set, each snapshot is prefixed with an HMAC-SHA256
+of its bytes, and a snapshot whose signature does not match is refused
+before it is unpickled. Snapshots written before a key was set carry no
+signature and are still read, so turning signing on needs no migration.
 """
 
 from __future__ import annotations
 
-import io
+import gzip
+import hashlib
+import hmac
+import pickle
 from pathlib import Path
 
 import pandas as pd
 
 from app.config import settings
+
+
+_MAGIC = b"ADSIG1"
+_SIG_LEN = 32
+
+
+class SnapshotIntegrityError(RuntimeError):
+    pass
+
+
+def _signature(body: bytes) -> bytes:
+    return hmac.new(settings.snapshot_signing_key.encode(), body, hashlib.sha256).digest()
+
+
+def encode(df: pd.DataFrame) -> bytes:
+    body = gzip.compress(pickle.dumps(df, protocol=pickle.HIGHEST_PROTOCOL), compresslevel=6)
+    if settings.snapshot_signing_key:
+        return _MAGIC + _signature(body) + body
+    return body
+
+
+def decode(data: bytes) -> pd.DataFrame:
+    if data.startswith(_MAGIC):
+        sig, body = data[len(_MAGIC):len(_MAGIC) + _SIG_LEN], data[len(_MAGIC) + _SIG_LEN:]
+        if not settings.snapshot_signing_key:
+            raise SnapshotIntegrityError("Snapshot is signed but SNAPSHOT_SIGNING_KEY is not set.")
+        if not hmac.compare_digest(sig, _signature(body)):
+            raise SnapshotIntegrityError("Snapshot signature does not match; refusing to load it.")
+    else:
+        body = data
+    return pickle.loads(gzip.decompress(body))  # noqa: S301 - signature checked above when enabled
 
 
 class LocalSnapshots:
@@ -29,12 +70,12 @@ class LocalSnapshots:
         path = self._path(session_id, version)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        df.to_pickle(tmp, compression="gzip")
+        tmp.write_bytes(encode(df))
         tmp.replace(path)  # never leave a half-written version behind
 
     def read(self, session_id: str, version: int) -> pd.DataFrame | None:
         path = self._path(session_id, version)
-        return pd.read_pickle(path, compression="gzip") if path.exists() else None
+        return decode(path.read_bytes()) if path.exists() else None
 
 
 class S3Snapshots:
@@ -64,17 +105,15 @@ class S3Snapshots:
         return f"{session_id}/v{version}.pkl.gz"
 
     def write(self, session_id: str, version: int, df: pd.DataFrame) -> None:
-        buf = io.BytesIO()
-        df.to_pickle(buf, compression={"method": "gzip"})
         # A PUT either completes or does not exist, so no temp-file dance.
-        self.client.put_object(Bucket=self.bucket, Key=self._key(session_id, version), Body=buf.getvalue())
+        self.client.put_object(Bucket=self.bucket, Key=self._key(session_id, version), Body=encode(df))
 
     def read(self, session_id: str, version: int) -> pd.DataFrame | None:
         try:
             obj = self.client.get_object(Bucket=self.bucket, Key=self._key(session_id, version))
         except self.client.exceptions.NoSuchKey:
             return None
-        return pd.read_pickle(io.BytesIO(obj["Body"].read()), compression={"method": "gzip"})
+        return decode(obj["Body"].read())
 
 
 def make_snapshot_storage(root: Path):

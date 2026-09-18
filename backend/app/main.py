@@ -43,6 +43,7 @@ from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Query, Re
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from app import rate_limit
 from app.agent import run_agent_turn
 from app.auth import current_user, optional_user, owns, router as auth_router
 from app.config import settings
@@ -76,6 +77,25 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    # The API returns JSON and file downloads only, never pages.
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -222,7 +242,8 @@ def health(request: Request):
 
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...), user: dict | None = Depends(current_user)):
+async def upload_file(http: Request, file: UploadFile = File(...), user: dict | None = Depends(current_user)):
+    rate_limit.check("upload", http, user)
     if not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Please upload an .xlsx or .xls file.")
 
@@ -234,9 +255,10 @@ async def upload_file(file: UploadFile = File(...), user: dict | None = Depends(
 
 
 @app.post("/sample", response_model=UploadResponse)
-def start_sample(user: dict | None = Depends(current_user)):
+def start_sample(http: Request, user: dict | None = Depends(current_user)):
     """Opens the bundled dataset. Someone trying a deployed copy of the app
     has no file of their own, and should not need one to see it work."""
+    rate_limit.check("upload", http, user)
     path = settings.resolved_sample_file
     if not path.is_file():
         raise HTTPException(status_code=404, detail="The sample file is not available on this server.")
@@ -614,8 +636,9 @@ def get_diff(session_id: str, version: int, user: dict | None = Depends(current_
 # --------------------------------------------------------------------------
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, user: dict | None = Depends(current_user)):
+def chat(request: ChatRequest, http: Request, user: dict | None = Depends(current_user)):
     session = _require_session(request.session_id, user)
+    rate_limit.check("chat", http, user)
 
     if not settings.openrouter_api_key:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY is not configured on the server.")

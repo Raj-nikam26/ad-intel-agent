@@ -45,7 +45,8 @@ from app import excel_formulas
 from app.diagnostics import run_full_diagnostics, run_scoped_diagnostics, Issue
 from app import graph_backend
 from app.safe_editor import apply_operation, EditValidationError
-from app.safe_executor import run_expression, UnsafeExpressionError, ExecutionError
+from app.isolated_exec import run_isolated
+from app.safe_executor import UnsafeExpressionError, ExecutionError
 from app.data_store import session_store, Session, VersionConflictError
 
 # Tool results carry their Excel equivalent under this key. It is for the
@@ -238,7 +239,7 @@ def execute_tool_call(name: str, arguments: dict, session: Session,
 
     if name == "tabular_query":
         try:
-            result = run_expression(arguments["expression"], df)
+            result = run_isolated(arguments["expression"], df)
         except (UnsafeExpressionError, ExecutionError) as e:
             return {"error": str(e)}
         if isinstance(result, pd.DataFrame):

@@ -105,6 +105,7 @@ def _user_from_claims(claims: dict) -> dict:
         name=claims.get("name") or email or clerk_id,
         picture=claims.get("picture") or "",
     )
+    user["clerk_id"] = clerk_id  # matched against RATE_LIMIT_EXEMPT
     _users[clerk_id] = (user, time.time())
     return user
 

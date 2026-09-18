@@ -19,3 +19,5 @@ os.environ["NEO4J_URI"] = ""
 os.environ["REDIS_URL"] = ""
 os.environ["S3_ENDPOINT_URL"] = ""
 os.environ["AUTH_ENABLED"] = "false"   # auth tests switch it on explicitly
+os.environ["RATE_LIMIT_ENABLED"] = "false"   # rate-limit tests switch it on
+os.environ["SNAPSHOT_SIGNING_KEY"] = "test-signing-key"

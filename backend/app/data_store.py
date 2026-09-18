@@ -83,7 +83,8 @@ class _PostgresConnection:
     ('?') are rewritten to psycopg's ('%s')."""
 
     def __init__(self, url: str):
-        self._conn = psycopg.connect(url)
+        self._pool = _pool_for(url)
+        self._conn = self._pool.getconn()
 
     @staticmethod
     def _sql(sql: str) -> str:
@@ -107,7 +108,35 @@ class _PostgresConnection:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        # Back to the pool, not closed: opening a TLS connection to a
+        # hosted database costs far more than the query itself.
+        self._pool.putconn(self._conn)
+
+
+_pools: dict = {}
+_pools_lock = threading.Lock()
+
+
+def _pool_for(url: str):
+    with _pools_lock:
+        if url not in _pools:
+            from psycopg_pool import ConnectionPool
+
+            from app.config import settings
+
+            pool = ConnectionPool(
+                url, min_size=1, max_size=max(1, settings.db_pool_max), timeout=15,
+                check=ConnectionPool.check_connection,  # drop connections the server closed
+                open=False,
+            )
+            try:  # fail fast with the real error if the database is unreachable
+                pool.open(wait=True, timeout=15)
+            except Exception:
+                pool.close()
+                psycopg.connect(url).close()  # re-raise the underlying connection error
+                raise
+            _pools[url] = pool
+        return _pools[url]
 
 # Sessions held fully in memory at once. Disk is authoritative, so an
 # evicted session is simply reloaded on its next request.

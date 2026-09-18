@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     # Redis queue for graph sync. Empty = sync runs inline after each edit.
     redis_url: str = ""
 
+    # Usage limits. RATE_LIMIT_EXEMPT: comma-separated Clerk user ids or
+    # emails that are never limited (the owner's demo account).
+    rate_limit_enabled: bool = True
+    rate_limit_chat_per_hour: int = 30
+    rate_limit_chat_per_day: int = 100
+    rate_limit_uploads_per_hour: int = 10
+    rate_limit_exempt: str = ""
+
+    # HMAC key for version snapshots. When set, a snapshot whose signature
+    # does not match is refused before it is unpickled.
+    snapshot_signing_key: str = ""
+
+    # Postgres connection pool size.
+    db_pool_max: int = 5
+
     @property
     def resolved_data_dir(self) -> Path:
         p = Path(self.data_dir)

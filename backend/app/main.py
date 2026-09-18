@@ -45,6 +45,9 @@ from fastapi.responses import StreamingResponse
 
 from app import rate_limit
 from app.agent import run_agent_turn
+from app import excel_formulas
+from app.excel_reader import read_table
+from app.safe_editor import EditValidationError, apply_operation
 from app.auth import current_user, optional_user, owns, router as auth_router
 from app.config import settings
 from app.data_store import session_store, Session, VersionConflictError
@@ -55,7 +58,7 @@ from app.graph_cache import get_graph, invalidate_session
 from app.graph_sync import on_new_version
 from app.schemas import (
     UploadResponse, ColumnMeta, DataPage, ChatRequest, ChatResponse,
-    HistoryResponse, AuditLogEntry, RevertRequest, RevertResponse,
+    HistoryResponse, AuditLogEntry, RevertRequest, RevertResponse, AddColumnRequest, AddColumnResponse,
     MappingResponse, MappingRequest,
     IssuesResponse, IssueOut, GraphStats, GraphNode, GraphEdge, GraphView,
     DiffResponse,
@@ -215,7 +218,11 @@ def _start_session(contents: bytes, filename: str, owner_id: str | None = None) 
         # Deliberately NO cleaning step here - the data is stored exactly
         # as uploaded. See diagnostics.py for read-only issue detection
         # and safe_editor.py for the only path that can ever change it.
-        df = pd.read_excel(io.BytesIO(contents))
+        # read_table only locates the table (header row, margins); it
+        # does not alter any value inside it.
+        df, where = read_table(contents)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail="Could not parse this file as Excel.") from e
 
@@ -223,8 +230,14 @@ def _start_session(contents: bytes, filename: str, owner_id: str | None = None) 
         raise HTTPException(status_code=400, detail="Uploaded file has no rows.")
 
     session = session_store.create(df, filename=filename, owner_id=owner_id)
-    logger.info("Session created: %s (%s rows, %s columns)", session.session_id, len(df), len(df.columns))
-    return _session_payload(session)
+    logger.info("Session created: %s (%s rows, %s columns, table at %s!%s)",
+                session.session_id, len(df), len(df.columns), where.sheet, where.origin)
+    payload = _session_payload(session)
+    if where.moved:
+        payload.notice = (f"Table found at {where.origin} on sheet '{where.sheet}'. "
+                          f"Headings were taken from row {where.header_row}; row numbers here "
+                          "match the exported file, where the table starts at A1.")
+    return payload
 
 
 # --------------------------------------------------------------------------
@@ -699,6 +712,41 @@ def history(session_id: str, user: dict | None = Depends(current_user)):
             for e in session.audit_log
         ],
     )
+
+
+@app.post("/columns", response_model=AddColumnResponse)
+def add_column(request: AddColumnRequest, user: dict | None = Depends(current_user)):
+    """Adds a column at the user's request. Goes through the same edit
+    operation, versioning and audit log as the assistant's edits, so it
+    shows in History and can be restored away like any other change."""
+    session = _require_session(request.session_id, user)
+    df = session.current_df
+    args = {
+        "new_column": request.name, "value": request.value,
+        "source_column": request.source_column or None, "after_column": request.after_column or None,
+    }
+    try:
+        new_df, preview = apply_operation(df, operation="add_column", **args)
+    except EditValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    name = request.name.strip()
+    filled = bool(args["source_column"]) or request.value not in (None, "")
+    how = (f"copy of {args['source_column']}" if args["source_column"]
+           else f"filled with '{request.value}'" if filled else "empty")
+    excel = excel_formulas.for_edit("add_column", args, df, new_df)
+    try:
+        entry = session_store.apply_edit(
+            session_id=session.session_id, new_df=new_df, operation="add_column", scope=name,
+            rows_affected=len(new_df) if filled else 0,
+            reason=request.reason or f"Added column {name} ({how})",
+            diff_preview=preview, excel=excel, user_id=user["id"] if user else None,
+        )
+    except VersionConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    return AddColumnResponse(status="added", column=name, current_version=entry.version,
+                             rows_affected=entry.rows_affected, excel=excel)
 
 
 @app.post("/revert", response_model=RevertResponse)

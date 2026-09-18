@@ -98,7 +98,8 @@ def detect_missing_value_gaps(df: pd.DataFrame, scope_column: str | None = None,
                 issue_type="missing_value",
                 scope=f"column:{col}",
                 row_indices=df[missing].index.tolist(),
-                description=f"{count} rows are missing a value in '{col}'.",
+                description=(f"{count} row is missing a value in '{col}'." if count == 1
+                             else f"{count} rows are missing a value in '{col}'."),
                 sample=df[missing].head(3).index.tolist(),
             ))
     return issues

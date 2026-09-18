@@ -9,6 +9,7 @@ import Splitter from './components/Splitter'
 import LandingPage from './components/LandingPage'
 import FormulaPanel from './components/FormulaPanel'
 import SchemaPanel from './components/SchemaPanel'
+import AddColumnDialog from './components/AddColumnDialog'
 
 const SESSION_KEY = 'adintel.session'
 
@@ -25,7 +26,7 @@ const formulaFrom = (toolCalls, label) => {
 }
 import {
   ChevronDown, ChevronUp, Columns3, Download, FileSpreadsheet, Filter, FilterX, History,
-  Network, Search, Sparkles, SquareFunction, Table2, TriangleAlert, X,
+  Info, Network, Plus, Search, Sparkles, SquareFunction, Table2, TriangleAlert, X,
 } from 'lucide-react'
 
 /**
@@ -67,6 +68,8 @@ export default function App({ account = null }) {
   const [error, setError] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [formulaEntry, setFormulaEntry] = useState(null)
+  const [addingColumn, setAddingColumn] = useState(false)
+  const [notice, setNotice] = useState(null)
   const [restoring, setRestoring] = useState(() => {
     try { return !!localStorage.getItem(SESSION_KEY) } catch { return false }
   })
@@ -93,6 +96,7 @@ export default function App({ account = null }) {
     setMessages(data.transcript || [])
     setChangedCells(new Set())
     setChangeSummary(null)
+    setNotice(data.notice || null)
     const lastWithFormula = [...(data.transcript || [])].reverse()
       .map((m) => formulaFrom(m.toolCalls, m.text?.slice(0, 80)))
       .find(Boolean)
@@ -131,6 +135,30 @@ export default function App({ account = null }) {
   function closeFile() {
     try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setSession(null)
+  }
+
+  // Edits can add columns, so the column list and per-column counts are
+  // re-read after any new version. Messages and view state are kept.
+  async function refreshColumns() {
+    if (!session) return
+    try {
+      const fresh = await api.session(session.session_id)
+      setSession((s) => ({
+        ...s,
+        columns: fresh.columns,
+        column_meta: fresh.column_meta,
+        column_count: fresh.column_count,
+        row_count: fresh.row_count,
+      }))
+    } catch { /* the grid still reloads its own columns */ }
+  }
+
+  async function onColumnAdded(res) {
+    setAddingColumn(false)
+    setVersion(res.current_version)
+    setSelectedVersion(res.current_version)
+    if (res.excel) setFormulaEntry({ label: `Add column ${res.column}`, excel: res.excel })
+    await Promise.all([loadDiff(res.current_version), refreshColumns()])
   }
 
   const loadDiff = useCallback(async (v) => {
@@ -172,7 +200,7 @@ export default function App({ account = null }) {
       if (res.data_changed) {
         setVersion(res.version)
         setSelectedVersion(res.version)
-        await loadDiff(res.version)
+        await Promise.all([loadDiff(res.version), refreshColumns()])
         if (!fx) { setBottomTab('history'); setBottomOpen(true) }
       }
     } catch (err) {
@@ -212,7 +240,7 @@ export default function App({ account = null }) {
   async function onRestored(res) {
     setVersion(res.current_version)
     setSelectedVersion(res.current_version)
-    await loadDiff(res.current_version)
+    await Promise.all([loadDiff(res.current_version), refreshColumns()])
   }
 
   function showFormula(entry, label) {
@@ -350,7 +378,17 @@ export default function App({ account = null }) {
           </button>
         )}
 
+        <button className="ws-btn" onClick={() => setAddingColumn(true)} title="Add a new column">
+          <Plus size={15} /> Add column
+        </button>
+
         <div className="ws-chips">
+          {notice && (
+            <span className="ws-chip blue" title={notice}>
+              <Info size={13} /> {notice.split('.')[0]}
+              <button onClick={() => setNotice(null)} aria-label="Dismiss"><X size={12} /></button>
+            </span>
+          )}
           {highlightRows && (
             <span className="ws-chip green">
               {highlightRows.length.toLocaleString()} rows · <code>{selectedScope}</code>
@@ -471,6 +509,15 @@ export default function App({ account = null }) {
           />
         </aside>
       </div>
+
+      {addingColumn && (
+        <AddColumnDialog
+          sessionId={session.session_id}
+          columns={session.columns}
+          onClose={() => setAddingColumn(false)}
+          onAdded={onColumnAdded}
+        />
+      )}
 
       {/* ── Status bar ── */}
       <footer className="ws-status">

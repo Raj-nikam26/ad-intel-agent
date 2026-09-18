@@ -112,6 +112,7 @@
   background: var(--ws-card);
   color: var(--ws-text);
   font-size: 13px; font-weight: 500;
+  white-space: nowrap; flex: none;
   cursor: pointer;
   transition: background .15s, border-color .15s, box-shadow .15s, transform .05s;
 }
@@ -668,3 +669,63 @@
 .ws .graph-hint { border-radius: 999px; border: 1px solid var(--ws-line); background: rgba(255, 255, 255, .92); color: var(--ws-sub); }
 .ws .graph-inspector { border-top: 1px solid var(--ws-line-soft); background: #fbfbfd; }
 .ws .insp-type { color: var(--ws-accent-strong); letter-spacing: .06em; }
+
+/* ---------------------------------------------------------------- notice chip */
+.ws-chip.blue { color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.ws-chip button { display: grid; place-items: center; width: 18px; height: 18px; margin-left: 2px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.ws-chip button:hover { background: rgba(0, 0, 0, .06); }
+
+/* ---------------------------------------------------------------- dialog */
+.ws-modal-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, .32);
+  backdrop-filter: blur(2px);
+  animation: ws-fade .12s both;
+}
+.ws-modal {
+  width: min(460px, 100%);
+  max-height: calc(100vh - 32px); overflow: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 20px 22px 18px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e6e8ec;
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, .3);
+  font: 13px "Inter", "Segoe UI", system-ui, sans-serif;
+  color: #0f172a;
+  animation: ws-pop .16s both;
+}
+.ws-modal-head { display: flex; align-items: center; justify-content: space-between; }
+.ws-modal-head h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.ws-field { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.ws-field > span, .ws-field legend { font-size: 12.5px; font-weight: 600; color: #475569; padding: 0; margin-bottom: 6px; }
+.ws-field > span { margin-bottom: 0; }
+.ws-field input, .ws-field select {
+  height: 38px; padding: 0 12px;
+  border: 1px solid #e6e8ec; border-radius: 9px;
+  font: 13.5px "Inter", "Segoe UI", system-ui, sans-serif; color: #0f172a;
+  background: #fff; outline: 0;
+  transition: border-color .15s, box-shadow .15s;
+}
+.ws-field input:focus, .ws-field select:focus { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(16, 185, 129, .15); }
+.ws-field input[aria-invalid="true"] { border-color: #fca5a5; }
+.ws-field-err { margin: 0; color: #b91c1c; font-size: 12.5px; }
+.ws-choice { display: flex; flex-direction: column; gap: 6px; }
+.ws-choice label {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid #e6e8ec; border-radius: 9px;
+  cursor: pointer; font-size: 13.5px;
+  transition: border-color .15s, background .15s;
+}
+.ws-choice label:hover { background: #f8fafc; }
+.ws-choice label.on { border-color: #6ee7b7; background: #f0fdf7; }
+.ws-choice input { accent-color: #059669; margin: 0; }
+.ws-modal-note { margin: 0; font-size: 12.5px; color: #64748b; }
+.ws-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.ws-modal .ws-btn:disabled { opacity: .5; cursor: default; }
+@keyframes ws-fade { from { opacity: 0; } }
+@keyframes ws-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) { .ws-modal-backdrop, .ws-modal { animation: none; } }

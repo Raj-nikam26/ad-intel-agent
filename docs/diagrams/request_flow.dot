@@ -8,25 +8,27 @@ digraph flow {
     label=<<FONT POINT-SIZE="13" COLOR="#3a6fa8"><B>A · Asking a question</B></FONT>>; labeljust=l;
     style="rounded"; color="#b9cfe8"; margin=16;
     q1 [label=<<B>1  Question</B><BR/><FONT POINT-SIZE="9.5">"Which Pune advertisers ran finance ads?"</FONT>>, fillcolor="#ffffff"];
-    q2 [label=<<B>2  Understand the request</B><BR/><FONT POINT-SIZE="9.5">LLM picks the tool and extracts entities</FONT>>, fillcolor="#fff6e5", color="#b7791f"];
-    q3 [label=<<B>3  Resolve names</B><BR/><FONT POINT-SIZE="9.5">full-text search: "pune" to the exact stored name</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
-    q4 [label=<<B>4  Traverse the graph</B><BR/><FONT POINT-SIZE="9.5">subject to linked attributes in Neo4j</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
-    q5 [label=<<B>5  Collect evidence</B><BR/><FONT POINT-SIZE="9.5">matching facts plus the rows they came from</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
-    q6 [label=<<B>6  Grounded answer</B><BR/><FONT POINT-SIZE="9.5">LLM writes it only from the retrieved facts</FONT>>, fillcolor="#fff6e5", color="#b7791f"];
-    q7 [label=<<B>7  Shown to the user</B><BR/><FONT POINT-SIZE="9.5">answer · source rows · Excel formula</FONT>>, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2];
-    q1 -> q2 -> q3 -> q4 -> q5 -> q6 -> q7;
+    q0 [label=<<B>2  Check the caller</B><BR/><FONT POINT-SIZE="9.5">token verified · file owned · usage limit</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+    q2 [label=<<B>3  Understand the request</B><BR/><FONT POINT-SIZE="9.5">LLM picks the tool and extracts entities</FONT>>, fillcolor="#fff6e5", color="#b7791f"];
+    q3 [label=<<B>4  Resolve names</B><BR/><FONT POINT-SIZE="9.5">full-text search: "pune" to the exact stored name</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
+    q4 [label=<<B>5  Traverse the graph</B><BR/><FONT POINT-SIZE="9.5">Neo4j once it holds this version,<BR/>in-process graph until then</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
+    q5 [label=<<B>6  Collect evidence</B><BR/><FONT POINT-SIZE="9.5">matching facts plus the rows they came from</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
+    q6 [label=<<B>7  Grounded answer</B><BR/><FONT POINT-SIZE="9.5">LLM writes it only from the retrieved facts</FONT>>, fillcolor="#fff6e5", color="#b7791f"];
+    q7 [label=<<B>8  Shown to the user</B><BR/><FONT POINT-SIZE="9.5">answer · source rows · Excel formula</FONT>>, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2];
+    q1 -> q0 -> q2 -> q3 -> q4 -> q5 -> q6 -> q7;
   }
 
   subgraph cluster_e {
     label=<<FONT POINT-SIZE="13" COLOR="#6b3fb0"><B>B · Making a change</B></FONT>>; labeljust=l;
     style="rounded"; color="#d4c2f5"; margin=16;
     e1 [label=<<B>1  Instruction</B><BR/><FONT POINT-SIZE="9.5">"Fill the missing categories"</FONT>>, fillcolor="#ffffff"];
-    e2 [label=<<B>2  Choose an operation</B><BR/><FONT POINT-SIZE="9.5">LLM selects one of the fixed operations</FONT>>, fillcolor="#fff6e5", color="#b7791f"];
-    e3 [label=<<B>3  Validate and apply</B><BR/><FONT POINT-SIZE="9.5">no generated code; rows recomputed server-side</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
-    e4 [label=<<B>4  Save a new version</B><BR/><FONT POINT-SIZE="9.5">snapshot + audit entry: who, what, why</FONT>>, fillcolor="#d6ece0", color="#2a6f4e"];
-    e5 [label=<<B>5  Update the graph</B><BR/><FONT POINT-SIZE="9.5">change event queued, sync worker updates Neo4j</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
-    e6 [label=<<B>6  Prove it</B><BR/><FONT POINT-SIZE="9.5">server diff highlights exactly the changed cells</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
-    e7 [label=<<B>7  Shown to the user</B><BR/><FONT POINT-SIZE="9.5">new version · restore option · Excel steps</FONT>>, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2];
-    e1 -> e2 -> e3 -> e4 -> e5 -> e6 -> e7;
+    e0 [label=<<B>2  Check the caller</B><BR/><FONT POINT-SIZE="9.5">token verified · file owned · usage limit</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+    e2 [label=<<B>3  Choose an operation</B><BR/><FONT POINT-SIZE="9.5">LLM selects one of the fixed operations</FONT>>, fillcolor="#fff6e5", color="#b7791f"];
+    e3 [label=<<B>4  Validate and apply</B><BR/><FONT POINT-SIZE="9.5">no generated code; rows recomputed server-side</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+    e4 [label=<<B>5  Save a new version</B><BR/><FONT POINT-SIZE="9.5">signed snapshot + audit entry: who, what, why</FONT>>, fillcolor="#d6ece0", color="#2a6f4e"];
+    e5 [label=<<B>6  Update the graph</B><BR/><FONT POINT-SIZE="9.5">in the background: only the changed rows</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8"];
+    e6 [label=<<B>7  Prove it</B><BR/><FONT POINT-SIZE="9.5">server diff highlights exactly the changed cells</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+    e7 [label=<<B>8  Shown to the user</B><BR/><FONT POINT-SIZE="9.5">new version · restore option · Excel steps</FONT>>, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2];
+    e1 -> e0 -> e2 -> e3 -> e4 -> e5 -> e6 -> e7;
   }
 }

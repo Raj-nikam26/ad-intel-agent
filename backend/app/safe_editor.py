@@ -135,6 +135,43 @@ def flag_rows(df: pd.DataFrame, row_indices: list, flag_column: str, flag_value:
     return new_df, preview
 
 
+MAX_COLUMN_NAME = 100
+
+
+def add_column(df: pd.DataFrame, new_column: str, value=None, source_column: str | None = None,
+               after_column: str | None = None) -> tuple[pd.DataFrame, list]:
+    """Adds one column. It starts empty, filled with a single fixed
+    value, or as a copy of an existing column - never computed from an
+    expression, for the same reason no other edit runs model-written
+    code. Existing columns are not touched."""
+    name = (new_column or "").strip()
+    if not name:
+        raise EditValidationError("The new column needs a name.")
+    if len(name) > MAX_COLUMN_NAME:
+        raise EditValidationError(f"Column names are limited to {MAX_COLUMN_NAME} characters.")
+    if name.lower() in {str(c).strip().lower() for c in df.columns}:
+        raise EditValidationError(f"A column named '{name}' already exists.")
+    if source_column and value not in (None, ""):
+        raise EditValidationError("Give either a fixed value or a column to copy, not both.")
+    if source_column and source_column not in df.columns:
+        raise EditValidationError(f"Column '{source_column}' does not exist.")
+    if after_column and after_column not in df.columns:
+        raise EditValidationError(f"Column '{after_column}' does not exist.")
+
+    new_df = df.copy(deep=True)
+    if source_column:
+        data = new_df[source_column].copy()
+    elif value not in (None, ""):
+        data = pd.Series([value] * len(new_df), index=new_df.index, dtype=object)
+    else:
+        data = pd.Series([None] * len(new_df), index=new_df.index, dtype=object)
+
+    position = list(new_df.columns).index(after_column) + 1 if after_column else len(new_df.columns)
+    new_df.insert(position, name, data)
+    preview = [{"row": int(i), "column": name, "before": None, "after": data.at[i]} for i in new_df.index[:5]]
+    return new_df, preview
+
+
 # The closed set of operations the agent is allowed to invoke by name.
 # Adding a new capability means adding a reviewed function here - never
 # means loosening this into "run this code the model wrote".
@@ -143,6 +180,7 @@ ALLOWED_OPERATIONS = {
     "fill_missing_value_bulk": fill_missing_value_bulk,
     "standardize_value": standardize_value,
     "flag_rows": flag_rows,
+    "add_column": add_column,
 }
 
 

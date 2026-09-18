@@ -33,6 +33,7 @@ class UploadResponse(BaseModel):
     preview: list[dict[str, Any]]
     current_version: int = 0
     transcript: list[dict[str, Any]] = []
+    notice: str | None = None   # e.g. where the table was found in the sheet
 
 
 class DataPage(BaseModel):
@@ -82,6 +83,23 @@ class HistoryResponse(BaseModel):
 class RevertRequest(BaseModel):
     session_id: str
     to_version: int
+
+
+class AddColumnRequest(BaseModel):
+    session_id: str
+    name: str
+    value: str | None = None           # fill every row with this value
+    source_column: str | None = None   # or copy this column
+    after_column: str | None = None    # position; default is the end
+    reason: str | None = None
+
+
+class AddColumnResponse(BaseModel):
+    status: str
+    column: str
+    current_version: int
+    rows_affected: int
+    excel: dict[str, Any] | None = None
 
 
 class RevertResponse(BaseModel):

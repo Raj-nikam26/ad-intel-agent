@@ -104,6 +104,20 @@ export const api = {
     })
   },
 
+  addColumn(sessionId, { name, value, sourceColumn, afterColumn }) {
+    return req('/columns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        name,
+        value: value || null,
+        source_column: sourceColumn || null,
+        after_column: afterColumn || null,
+      }),
+    })
+  },
+
   // A plain link cannot carry the Authorization header, so the file is
   // fetched and handed to the browser as a download.
   async exportFile(sessionId, filename) {

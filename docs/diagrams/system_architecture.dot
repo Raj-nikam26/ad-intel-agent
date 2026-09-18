@@ -1,45 +1,51 @@
 digraph system {
   rankdir=TB; compound=true; bgcolor="white";
-  nodesep=0.32; ranksep=0.55;
+  nodesep=0.3; ranksep=0.55;
   node [shape=box, style="filled", fillcolor="#eef1f6", color="#5a6472", penwidth=1.3,
-        fontname="Arial", fontsize=11, height=0.55, width=1.9, margin="0.14,0.08"];
+        fontname="Arial", fontsize=11, height=0.55, width=1.75, margin="0.12,0.08"];
   edge [color="#6b7585", penwidth=1.3, arrowsize=0.75, fontname="Arial", fontsize=9, fontcolor="#445061"];
 
   subgraph cluster_client {
-    label=<<FONT POINT-SIZE="9" COLOR="#7a8697"><B>CLIENT  ·  React 18 + Vite</B></FONT>>; labeljust=l;
+    label=<<FONT POINT-SIZE="9" COLOR="#7a8697"><B>CLIENT  ·  React 18 + Vite  ·  served by Vercel over HTTPS</B></FONT>>; labeljust=l;
     style="filled,rounded"; fillcolor="#fbfcfd"; color="#c8d0dc"; margin=12;
-    web [label=<<B>Web application</B><BR/><FONT POINT-SIZE="9">landing page · spreadsheet grid · assistant<BR/>history · schema · Excel formulas</FONT>>, width=3.6];
+    web [label=<<B>Web application</B><BR/><FONT POINT-SIZE="9">landing page · workspace (grid, assistant, history,<BR/>columns, Excel formulas) · privacy · terms · 404</FONT>>, width=3.9];
+    edge_h [label=<<B>Edge headers</B><BR/><FONT POINT-SIZE="9">HSTS · CSP · frame and<BR/>content-type protection</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+    {rank=same; web; edge_h;}
   }
 
   clerk [label=<<B>Clerk</B><BR/><FONT POINT-SIZE="9">sign-in · session tokens (JWT)</FONT>>,
          fillcolor="#e6dbf7", color="#6b3fb0", penwidth=2];
 
   subgraph cluster_api {
-    label=<<FONT POINT-SIZE="9" COLOR="#7a8697"><B>API  ·  FastAPI (Python 3.13)</B></FONT>>; labeljust=l;
+    label=<<FONT POINT-SIZE="9" COLOR="#7a8697"><B>API  ·  FastAPI (Python 3.12)  ·  Render</B></FONT>>; labeljust=l;
     style="filled,rounded"; fillcolor="#fbfcfd"; color="#c8d0dc"; margin=12;
     authm [label=<<B>Token verification</B><BR/><FONT POINT-SIZE="9">JWKS · issuer · expiry · origin</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+    rate  [label=<<B>Usage limits</B><BR/><FONT POINT-SIZE="9">per user or address · 429<BR/>owner accounts exempt</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
     data  [label=<<B>Data service</B><BR/><FONT POINT-SIZE="9">upload · grid · diff · export</FONT>>];
     schema[label=<<B>Schema profiler</B><BR/><FONT POINT-SIZE="9">column roles for any file</FONT>>];
     diag  [label=<<B>Diagnostics</B><BR/><FONT POINT-SIZE="9">read-only issue checks</FONT>>];
     agent [label=<<B>Assistant</B><BR/><FONT POINT-SIZE="9">tool selection · grounded answers</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8", penwidth=2];
+    sandbox [label=<<B>Query sandbox</B><BR/><FONT POINT-SIZE="9">separate process · no network<BR/>time and CPU limits</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
     edit  [label=<<B>Edit service</B><BR/><FONT POINT-SIZE="9">four fixed operations</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0", penwidth=2];
-    {rank=same; authm; data; schema;}
-    {rank=same; diag; agent; edit;}
-    authm -> data -> schema [style=invis];
-    diag -> agent -> edit [style=invis];
+    sync  [label=<<B>Graph sync</B><BR/><FONT POINT-SIZE="9">background, in version order</FONT>>];
+    {rank=same; authm; rate; data; schema;}
+    {rank=same; diag; agent; sandbox; edit;}
+    authm -> rate -> data -> schema [style=invis];
+    diag -> agent -> sandbox -> edit [style=invis];
+    authm -> diag [style=invis]; schema -> edit [style=invis];
+    diag -> sync [style=invis];
   }
 
-  worker [label=<<B>Graph sync worker</B><BR/><FONT POINT-SIZE="9">applies each change to the graph</FONT>>];
   llm [label=<<B>LLM (OpenRouter)</B><BR/><FONT POINT-SIZE="9">chooses tools · writes answers</FONT>>,
        style="filled,dashed", fillcolor="#fff6e5", color="#b7791f", penwidth=1.6];
 
   subgraph cluster_data {
-    label=<<FONT POINT-SIZE="9" COLOR="#2a6f4e"><B>DATA</B></FONT>>; labeljust=l;
+    label=<<FONT POINT-SIZE="9" COLOR="#2a6f4e"><B>DATA  ·  managed services</B></FONT>>; labeljust=l;
     style="filled,rounded"; fillcolor="#f7fbf9"; color="#9ecfb5"; margin=12;
-    pg  [label=<<B>PostgreSQL</B><BR/><FONT POINT-SIZE="9">users · sessions · versions<BR/>audit log · chat</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.95];
-    snap[label=<<B>Snapshot storage</B><BR/><FONT POINT-SIZE="9">one file per version<BR/>disk or S3</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.95];
-    neo [label=<<B>Neo4j</B><BR/><FONT POINT-SIZE="9">knowledge graph<BR/>full-text name index</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.95];
-    rd  [label=<<B>Redis</B><BR/><FONT POINT-SIZE="9">graph sync queue</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.95];
+    pg  [label=<<B>PostgreSQL</B><BR/><FONT POINT-SIZE="9">Supabase · pooled connections<BR/>users · sessions · versions<BR/>audit log · chat</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=1.05];
+    snap[label=<<B>Snapshot storage</B><BR/><FONT POINT-SIZE="9">Supabase Storage (S3 API)<BR/>one signed file per version</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=1.05];
+    neo [label=<<B>Neo4j Aura</B><BR/><FONT POINT-SIZE="9">knowledge graph<BR/>full-text name index</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=1.05];
+    rd  [label=<<B>Redis (optional)</B><BR/><FONT POINT-SIZE="9">sync queue for a<BR/>separate worker</FONT>>, shape=cylinder, style="filled,dashed", fillcolor="#eef6f1", color="#2a6f4e", penwidth=1.5, height=1.05];
     {rank=same; pg; snap; neo; rd;}
     pg -> snap -> neo -> rd [style=invis];
   }
@@ -49,9 +55,10 @@ digraph system {
   data -> pg [label="metadata"];
   data -> snap [label="snapshots"];
   agent -> neo [label="graph queries"];
+  agent -> sandbox [constraint=false];
   agent -> llm [label="prompt + retrieved facts", constraint=false];
   edit -> pg [label="new version + audit"];
-  edit -> rd [label="change event"];
-  rd -> worker [label="queue"];
-  worker -> neo [label="update rows"];
+  edit -> sync [label="change event"];
+  sync -> neo [label="update changed rows"];
+  sync -> rd [style=dashed, label="if configured"];
 }

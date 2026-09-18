@@ -1,0 +1,42 @@
+digraph deploy {
+  rankdir=LR; bgcolor="white"; nodesep=0.35; ranksep=0.9; compound=true;
+  node [shape=box, style="filled,rounded", fillcolor="#eef1f6", color="#5a6472", penwidth=1.3,
+        fontname="Arial", fontsize=11, width=2.2, height=0.62, margin="0.14,0.08"];
+  edge [color="#6b7585", penwidth=1.3, arrowsize=0.75, fontname="Arial", fontsize=9, fontcolor="#445061"];
+
+  user [label=<<B>Browser</B><BR/><FONT POINT-SIZE="9">desktop or phone</FONT>>, shape=box, style="filled", fillcolor="#ffffff"];
+
+  subgraph cluster_vercel {
+    label=<<FONT POINT-SIZE="10" COLOR="#7a8697"><B>Vercel  ·  global edge</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#fbfcfd"; color="#c8d0dc"; margin=12;
+    fe [label=<<B>Static web app</B><BR/><FONT POINT-SIZE="9">HTML, JS, CSS · sitemap · robots<BR/>security headers · HTTPS only</FONT>>];
+  }
+
+  subgraph cluster_render {
+    label=<<FONT POINT-SIZE="10" COLOR="#7a8697"><B>Render  ·  web service</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#fbfcfd"; color="#c8d0dc"; margin=12;
+    api [label=<<B>API service</B><BR/><FONT POINT-SIZE="9">FastAPI · Uvicorn · Python 3.12<BR/>graph sync thread · query sandbox</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8", penwidth=2];
+  }
+
+  subgraph cluster_supa {
+    label=<<FONT POINT-SIZE="10" COLOR="#2a6f4e"><B>Supabase  ·  ap-south-1 (Mumbai)</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#f7fbf9"; color="#9ecfb5"; margin=12;
+    pg [label=<<B>PostgreSQL 17</B><BR/><FONT POINT-SIZE="9">session pooler</FONT>>, shape=cylinder, style="filled", fillcolor="#d6ece0", color="#2a6f4e", height=0.8];
+    st [label=<<B>Storage bucket</B><BR/><FONT POINT-SIZE="9">adintel-snapshots (S3 API)</FONT>>, shape=cylinder, style="filled", fillcolor="#d6ece0", color="#2a6f4e", height=0.8];
+  }
+
+  neo [label=<<B>Neo4j Aura Free</B><BR/><FONT POINT-SIZE="9">neo4j+s:// (TLS)</FONT>>, shape=cylinder, style="filled", fillcolor="#d6ece0", color="#2a6f4e", height=0.8];
+  clerk [label=<<B>Clerk</B><BR/><FONT POINT-SIZE="9">sign-in · signing keys (JWKS)</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0"];
+  llm [label=<<B>OpenRouter</B><BR/><FONT POINT-SIZE="9">language model API</FONT>>, style="filled,rounded,dashed", fillcolor="#fff6e5", color="#b7791f"];
+  mon [label=<<B>Uptime monitor</B><BR/><FONT POINT-SIZE="9">GET /health every 5 min</FONT>>, style="filled,rounded,dashed"];
+
+  user -> fe [label="HTTPS"];
+  user -> clerk [label="sign in"];
+  user -> api [label="HTTPS API calls\nBearer token"];
+  api -> clerk [label="fetch signing keys", style=dashed];
+  api -> pg [label="TLS · pooled"];
+  api -> st [label="TLS · signed snapshots"];
+  api -> neo [label="TLS · Bolt"];
+  api -> llm [label="HTTPS"];
+  mon -> api [style=dashed, label="keeps it awake"];
+}

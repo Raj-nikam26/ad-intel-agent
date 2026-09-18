@@ -418,7 +418,38 @@ def _for_edit(operation: str, arguments: dict, before: pd.DataFrame, after: pd.D
             "notes": ["Only the flag column changes; no original values are touched."],
         }], changed=len(rows))
 
+    if operation == "add_column":
+        return add_column_steps(before, after, arguments)
+
     return None
+
+
+def add_column_steps(before: pd.DataFrame, after: pd.DataFrame, arguments: dict) -> dict | None:
+    """Steps to add the same column in the user's copy of the file."""
+    name = (arguments.get("new_column") or "").strip()
+    letter = col_letter(after, name)
+    if letter is None:
+        return None
+    last = _last_row(after)
+    at_end = after.columns.get_loc(name) == len(after.columns) - 1
+    steps = [f"Go to column {letter}." if at_end
+             else f"Right-click the column {letter} header and choose Insert to make room.",
+             f"Type {name} into {letter}1."]
+    formulas = []
+    source, value = arguments.get("source_column"), arguments.get("value")
+    if source:
+        src = col_letter(after, source)
+        formulas.append(_formula(f"Copy of {source}", f"={src}2"))
+        steps.append(f"Enter ={src}2 in {letter}2 and fill it down to {letter}{last} "
+                     f"(or copy column {src} and paste values).")
+    elif value not in (None, ""):
+        steps.append(f"Select {letter}2:{letter}{last}, type {value} and press Ctrl+Enter to fill every cell.")
+    return _wrap([{
+        "title": f"Add column {name}",
+        "formulas": formulas,
+        "steps": steps,
+        "notes": ["Existing columns keep their values; ones to the right move over by one letter."],
+    }], changed=len(after) if (source or value not in (None, "")) else 0)
 
 
 def _wrap(items: list[dict], changed: int | None = None) -> dict:

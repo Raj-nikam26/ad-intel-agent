@@ -183,7 +183,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "operation": {"type": "string", "enum": ["fill_missing_value", "fill_missing_value_bulk", "standardize_value", "flag_rows"]},
+                    "operation": {"type": "string", "enum": ["fill_missing_value", "fill_missing_value_bulk", "standardize_value", "flag_rows", "add_column"]},
                     "column": {"type": "string"},
                     "row_indices": {
                         "type": "array", "items": {"type": "integer"},
@@ -191,6 +191,9 @@ TOOL_DEFINITIONS = [
                     },
                     "value": {"type": "string", "description": "For fill_missing_value/standardize_value: the new value. For flag_rows: the flag value."},
                     "flag_column": {"type": "string", "description": "Only for flag_rows: name of the flag column."},
+                    "new_column": {"type": "string", "description": "Only for add_column: name of the column to create."},
+                    "source_column": {"type": "string", "description": "Only for add_column: copy this existing column's values into the new one. Omit for an empty column or a fixed value (use value)."},
+                    "after_column": {"type": "string", "description": "Only for add_column: place the new column after this one. Omit to add it at the end."},
                     "reason": {"type": "string", "description": "One-line summary of why, for the audit log."},
                 },
                 "required": ["operation", "reason"],
@@ -252,7 +255,19 @@ def execute_tool_call(name: str, arguments: dict, session: Session,
         operation = arguments["operation"]
         column = arguments.get("column")
         try:
-            if operation == "flag_rows":
+            if operation == "add_column":
+                new_df, preview = apply_operation(
+                    df, operation="add_column",
+                    new_column=arguments.get("new_column", ""),
+                    value=arguments.get("value"),
+                    source_column=arguments.get("source_column"),
+                    after_column=arguments.get("after_column"),
+                )
+                filled = arguments.get("source_column") or arguments.get("value") not in (None, "")
+                rows_affected = len(df) if filled else 0
+                column = arguments.get("new_column", "").strip()
+
+            elif operation == "flag_rows":
                 new_df, preview = apply_operation(
                     df, operation="flag_rows",
                     row_indices=arguments["row_indices"],

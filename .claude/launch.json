@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api-demo",
+      "runtimeExecutable": "D:/ad-intel-agent/backend/venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000"],
+      "cwd": "backend",
+      "env": { "DATABASE_URL": "", "NEO4J_URI": "", "REDIS_URL": "", "S3_ENDPOINT_URL": "", "AUTH_ENABLED": "false", "RATE_LIMIT_ENABLED": "false" },
+      "port": 8000
+    },
+    {
+      "name": "web-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5173"],
+      "env": { "VITE_CLERK_PUBLISHABLE_KEY": "" },
+      "port": 5173
+    }
+  ]
+}

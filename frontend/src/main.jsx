@@ -1,14 +1,22 @@
-import React, { useEffect } from 'react'
+import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { ClerkProvider, UserButton, useAuth, useClerk, useUser } from '@clerk/react'
-import App from './App.jsx'
 import LandingPage from './components/LandingPage.jsx'
+import CookieNotice from './components/CookieNotice.jsx'
 import { setTokenGetter } from './api'
 import './App.css'
 import './excel-theme.css'
 import './landing.css'
+import './workspace.css'
+
+// The workspace and the secondary pages load on demand, so the landing
+// page downloads only what it shows.
+const App = lazy(() => import('./App.jsx'))
+const LegalPage = lazy(() => import('./components/LegalPage.jsx'))
+const NotFound = lazy(() => import('./components/NotFound.jsx'))
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const Boot = () => <div className="boot" role="status">Loading…</div>
 
 /**
  * With a Clerk key configured:
@@ -28,11 +36,11 @@ function Root() {
     setTokenGetter(isSignedIn ? () => getToken() : null)
   }, [isSignedIn, getToken])
 
-  if (!isLoaded) return <div className="boot">Loading…</div>
-
-  if (!isSignedIn) {
-    const signIn = () => clerk.openSignIn()
-    const signUp = () => clerk.openSignUp()
+  // Most visitors are signed out, so the landing page renders at once
+  // instead of waiting for the sign-in script; buttons work once it loads.
+  if (!isLoaded || !isSignedIn) {
+    const signIn = () => { if (clerk.loaded) clerk.openSignIn() }
+    const signUp = () => { if (clerk.loaded) clerk.openSignUp() }
     return (
       <LandingPage
         onSignIn={signIn}
@@ -53,14 +61,22 @@ function Root() {
   return <App account={account} />
 }
 
+function Page() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/privacy' || path === '/terms') return <LegalPage kind={path.slice(1)} />
+  if (path !== '/') return <NotFound />
+  return CLERK_KEY ? <Root /> : <App />
+}
+
+const tree = (
+  <Suspense fallback={<Boot />}>
+    <Page />
+    <CookieNotice />
+  </Suspense>
+)
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {CLERK_KEY ? (
-      <ClerkProvider publishableKey={CLERK_KEY}>
-        <Root />
-      </ClerkProvider>
-    ) : (
-      <App />
-    )}
+    {CLERK_KEY ? <ClerkProvider publishableKey={CLERK_KEY}>{tree}</ClerkProvider> : tree}
   </React.StrictMode>,
 )

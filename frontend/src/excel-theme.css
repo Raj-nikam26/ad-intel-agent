@@ -26,51 +26,6 @@
 
 body { font-family: var(--font); color: var(--xl-text); background: #fff; }
 
-/* title bar */
-.titlebar { background: var(--xl-green) !important; border-bottom: 0 !important; box-shadow: none !important; }
-.titlebar .tb-app-logo, .titlebar .tb-app-name, .titlebar .tb-filename { color: #fff !important; }
-.titlebar .tb-version { background: rgba(255,255,255,.18) !important; color: #fff !important; border: 0 !important; }
-.titlebar .tb-center { background: #fff; border: 1px solid #c8c6c4; border-radius: 0; gap: 0; padding-right: 6px; }
-.tb-namebox { min-width: 70px; height: 26px; line-height: 26px; padding: 0 8px; border-right: 1px solid #c8c6c4; font-size: 12px; color: var(--xl-text); }
-.titlebar .tb-formula-label { color: var(--xl-muted) !important; font-style: italic; padding: 0 10px; border-right: 1px solid var(--xl-line); background: none !important; }
-.tb-cellvalue { max-width: 260px; padding: 0 10px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--xl-line); }
-.titlebar .tb-search { border: 0 !important; background: transparent !important; box-shadow: none !important; }
-.titlebar .tb-export, .titlebar .tb-chat-toggle, .tb-close {
-  border-radius: 2px !important; box-shadow: none !important; font-size: 12px; cursor: pointer;
-  background: rgba(255,255,255,.14) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.35) !important;
-}
-.tb-close { height: 28px; padding: 0 10px; font-family: var(--font); }
-.titlebar .tb-chat-toggle.active { background: #fff !important; color: var(--xl-green) !important; }
-
-/* sheet tabs */
-.tabbar { background: var(--xl-chrome) !important; border-color: var(--xl-line) !important; }
-.tabbar button { border-radius: 0 !important; color: var(--xl-muted) !important; }
-.tabbar button.active { background: #fff !important; color: var(--xl-green) !important; font-weight: 600; box-shadow: inset 0 -2px 0 var(--xl-green) !important; }
-
-/* grid */
-.grid-header { background: var(--xl-chrome) !important; border-bottom: 1px solid #c8c6c4 !important; }
-.grid-row { background: #fff !important; }
-.grid-row:hover { background: #f5f5f5 !important; }
-.grid-cell { font-family: Calibri, "Segoe UI", sans-serif !important; font-size: 13px !important; color: #000 !important; border-color: #d4d4d4 !important; }
-.grid-head-cell { font-family: var(--font) !important; font-size: 11.5px !important; font-weight: 600 !important; color: #444 !important; background: var(--xl-chrome) !important; text-transform: none !important; }
-.grid-head-cell.sorted { background: #d3f0e0 !important; box-shadow: inset 0 -2px 0 var(--xl-green); }
-.grid-cell.rownum { background: var(--xl-chrome) !important; color: #666 !important; font-family: var(--font) !important; font-size: 11.5px !important; justify-content: center; }
-.grid-cell.selected { outline: 2px solid var(--xl-green); outline-offset: -2px; z-index: 2; }
-.grid-cell.changed { background: #fff4ce !important; }
-.grid-cell.missing { color: #c50f1f !important; background: #fdf3f4 !important; }
-.grid-row.highlighted .grid-cell:not(.rownum) { background: var(--xl-green-tint) !important; }
-
-/* drawer, status bar, chat */
-.bottom-panel { background: #fff !important; border-top: 1px solid #c8c6c4 !important; }
-.statusbar { background: var(--xl-chrome) !important; color: #444 !important; border-top: 1px solid var(--xl-line) !important; }
-.ide-side { background: #fff !important; border-left: 1px solid #c8c6c4 !important; box-shadow: none !important; }
-.agent-head { background: var(--xl-chrome) !important; }
-.agent-avatar, .agent-send-btn { background: var(--xl-green) !important; border-radius: 2px !important; box-shadow: none !important; }
-.msg.user .msg-text { background: var(--xl-green-tint) !important; color: var(--xl-text) !important; border-radius: 2px !important; }
-.msg.assistant .msg-text { background: #fafafa !important; border: 1px solid var(--xl-line) !important; border-radius: 2px !important; }
-.msg-fx { margin-top: 6px; font: 600 12px var(--font); color: var(--xl-green); background: none; border: 1px solid #b7d6c2; border-radius: 2px; padding: 3px 8px; cursor: pointer; }
-.msg-fx:hover { background: var(--xl-green-tint); }
-
 /* history table */
 .hist-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .hist-table th { position: sticky; top: 0; background: var(--xl-chrome); text-align: left; font-weight: 600; color: #444; padding: 5px 10px; border-bottom: 1px solid #c8c6c4; }

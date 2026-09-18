@@ -24,15 +24,16 @@ const formulaFrom = (toolCalls, label) => {
   return tc ? { label, excel: tc.excel } : null
 }
 import {
-  FileSpreadsheet, Download, MessageSquare, X,
+  ChevronDown, ChevronUp, Columns3, Download, FileSpreadsheet, Filter, FilterX, History,
+  Network, Search, Sparkles, SquareFunction, Table2, TriangleAlert, X,
 } from 'lucide-react'
 
 /**
- * ExcelAI — IDE shell.
+ * ExcelAI workspace.
  *
- * Layout: Excel-style grid occupies the main canvas.
- * The AI chat panel slides in from the right on demand.
- * Landing page replaces the bare upload card.
+ * App bar (file, view switch, actions), a toolbar for the selected cell
+ * and filters, then the grid and the drawer (problems, history, columns,
+ * Excel formulas) as cards, with the assistant docked on the right.
  */
 export default function App({ account = null }) {
   const [session, setSession] = useState(null)
@@ -192,10 +193,10 @@ export default function App({ account = null }) {
   function draftMessage(text) {
     setInput(text)
     setChatOpen(true)
-    chatInputRef.current?.focus()
+    // The panel is hidden while closed, so focus once it has rendered.
     requestAnimationFrame(() => {
       const el = chatInputRef.current
-      if (el) el.setSelectionRange(el.value.length, el.value.length)
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) }
     })
   }
 
@@ -234,137 +235,139 @@ export default function App({ account = null }) {
     )
   }
 
-  // ─── IDE ────────────────────────────────────────────────────────
+  // ─── Workspace ──────────────────────────────────────────────────
   const fileName = session.filename || 'Spreadsheet.xlsx'
+  const filtersActive = !!(highlightRows || query || missingOnly || sortBy || filterColumn)
+  const cellRef = focusedCell
+    ? `${colLetter(session.columns.indexOf(focusedCell.column))}${focusedCell.row + 2}`
+    : ''
+  const clearFilters = () => {
+    setHighlightRows(null); setSelectedScope(null)
+    setQueryDraft(''); setQuery(''); setFilterColumn('')
+    setMissingOnly(false); setSortBy(''); setSortDir('asc')
+  }
+  const openBottom = (tab) => { setBottomTab(tab); setBottomOpen(true) }
 
   return (
-    <div className="ide">
-      {/* ── Ribbon / Toolbar ── */}
-      <header className="titlebar">
-        <div className="titlebar-top">
-          {/* Logo */}
-          <div className="tb-app-logo">
-            <FileSpreadsheet size={17} />
-            <span className="tb-app-name">ExcelAI</span>
-          </div>
-
-          {/* File info */}
-          <div className="tb-left">
-            <span className="tb-filename" title={fileName}>{fileName}</span>
-            <span className={`tb-version${version > 0 ? ' edited' : ''}`}>
-              v{version}{version === 0 ? ' · original' : ' · edited'}
-            </span>
-          </div>
-
-          {/* Name box + formula bar */}
-          <div className="tb-center">
-            <span className="tb-namebox" title="Selected cell">
-              {focusedCell
-                ? `${colLetter(session.columns.indexOf(focusedCell.column))}${focusedCell.row + 2}`
-                : ''}
-            </span>
-            <span className="tb-formula-label">fx</span>
-            {focusedCell && (
-              <span className="tb-cellvalue" title={String(focusedCell.value ?? '')}>
-                {focusedCell.value ?? ''}
+    <div className="ws">
+      {/* ── App bar ── */}
+      <header className="ws-bar">
+        <div className="ws-brand">
+          <span className="ws-logo"><FileSpreadsheet size={16} strokeWidth={2.2} /></span>
+          <div className="ws-file">
+            <span className="ws-file-name" title={fileName}>{fileName}</span>
+            <span className="ws-file-meta">
+              <span className={`ws-pill${version > 0 ? ' edited' : ''}`}>
+                v{version} · {version === 0 ? 'original' : 'edited'}
               </span>
-            )}
-            <input
-              className="tb-search"
-              placeholder="Search all columns…"
-              value={queryDraft}
-              onChange={(e) => setQueryDraft(e.target.value)}
-            />
-            <select
-              className="tb-col-select"
-              value={filterColumn}
-              onChange={(e) => setFilterColumn(e.target.value)}
-            >
-              <option value="">All columns</option>
-              {session.columns.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <label className={`tb-toggle${missingOnly ? ' on' : ''}`} title="Show rows with missing values only">
-              <input
-                type="checkbox"
-                checked={missingOnly}
-                disabled={!filterColumn}
-                onChange={(e) => setMissingOnly(e.target.checked)}
-              />
-              Missing only
-            </label>
-            {(highlightRows || query || missingOnly || sortBy) && (
-              <button
-                className="tb-clear"
-                onClick={() => {
-                  setHighlightRows(null); setSelectedScope(null)
-                  setQueryDraft(''); setQuery(''); setFilterColumn('')
-                  setMissingOnly(false); setSortBy(''); setSortDir('asc')
-                }}
-              >
-                Clear filters
-              </button>
-            )}
+              {session.row_count.toLocaleString()} rows · {session.column_count} columns
+            </span>
           </div>
+        </div>
 
-          {/* Right actions */}
-          <div className="tb-right">
-            <button className="tb-close" onClick={closeFile} title="Close this file and open another">
-              Close file
-            </button>
-            <button
-              className="tb-export"
-              onClick={() => api.exportFile(session.session_id, `edited_v${version}.xlsx`).catch((e) => setError(e.message))}
-            >
-              <Download size={13} />
-              Export v{version}
-            </button>
-            <button
-              className={`tb-chat-toggle${chatOpen ? ' active' : ''}`}
-              onClick={() => setChatOpen((o) => !o)}
-              title={chatOpen ? 'Hide AI Assistant' : 'Open AI Assistant'}
-            >
-              <MessageSquare size={13} />
-              AI Assistant
-            </button>
-            {account && (
-              <div className="tb-account" title={account.email || account.name}>
-                <span className="tb-account-name">{account.name}</span>
-                {account.button}
-              </div>
-            )}
-          </div>
+        <nav className="ws-seg" aria-label="View">
+          <button className={mainTab === 'data' ? 'on' : ''} onClick={() => setMainTab('data')}>
+            <Table2 size={15} /> Data
+          </button>
+          <button className={mainTab === 'graph' ? 'on' : ''} onClick={() => setMainTab('graph')}>
+            <Network size={15} /> Knowledge graph
+          </button>
+        </nav>
+
+        <div className="ws-actions">
+          <button
+            className={`ws-btn ai${chatOpen ? ' on' : ''}`}
+            onClick={() => setChatOpen((o) => !o)}
+            title={chatOpen ? 'Hide the assistant' : 'Open the assistant'}
+          >
+            <Sparkles size={15} /> Assistant
+          </button>
+          <button
+            className="ws-btn primary"
+            onClick={() => api.exportFile(session.session_id, `edited_v${version}.xlsx`).catch((e) => setError(e.message))}
+          >
+            <Download size={15} /> Export
+          </button>
+          <button className="ws-icon-btn" onClick={closeFile} title="Close this file">
+            <X size={17} />
+          </button>
+          {account && (
+            <div className="ws-account" title={account.email || account.name}>
+              {account.button}
+            </div>
+          )}
         </div>
       </header>
 
-      {/* ── Body ── */}
-      <div className="ide-body">
-        <div className="ide-main">
-          {/* Tab bar */}
-          <div className="tabbar">
-            <button className={mainTab === 'data' ? 'active' : ''} onClick={() => setMainTab('data')}>
-              Data
-              <span className="tab-count">{gridStats.filtered.toLocaleString()}</span>
-            </button>
-            <button className={mainTab === 'graph' ? 'active' : ''} onClick={() => setMainTab('graph')}>
-              Knowledge Graph
-            </button>
-            {highlightRows && (
-              <span className="tab-filterchip">
-                {highlightRows.length.toLocaleString()} rows from <code>{selectedScope}</code>
-              </span>
-            )}
-            {changeSummary && (
-              <span className="tab-changechip">
-                v{changeSummary.version}: {changeSummary.cells.toLocaleString()} cells changed
-              </span>
-            )}
-          </div>
+      {/* ── Toolbar ── */}
+      <div className="ws-toolbar">
+        <div className="ws-fx" title="Selected cell">
+          <span className="ws-fx-ref">{cellRef || '—'}</span>
+          <span className="ws-fx-sign">fx</span>
+          <span className="ws-fx-val" title={String(focusedCell?.value ?? '')}>
+            {focusedCell ? (focusedCell.value ?? <em>empty</em>) : <em>Select a cell</em>}
+          </span>
+        </div>
 
-          {/* Editor */}
-          <div
-            className="editor-area"
-            style={{ height: bottomOpen ? `calc(100% - ${bottomHeight}px - 34px)` : 'calc(100% - 34px)' }}
-          >
+        <label className="ws-search">
+          <Search size={15} />
+          <input
+            placeholder="Search every column…"
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
+          />
+          {queryDraft && (
+            <button onClick={() => { setQueryDraft(''); setQuery('') }} title="Clear search"><X size={13} /></button>
+          )}
+        </label>
+
+        <div className="ws-select">
+          <Filter size={14} />
+          <select value={filterColumn} onChange={(e) => setFilterColumn(e.target.value)}>
+            <option value="">All columns</option>
+            {session.columns.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <ChevronDown size={14} />
+        </div>
+
+        <label
+          className={`ws-switch${missingOnly ? ' on' : ''}${filterColumn ? '' : ' disabled'}`}
+          title={filterColumn ? 'Show only rows where this column is empty' : 'Pick a column first'}
+        >
+          <input
+            type="checkbox"
+            checked={missingOnly}
+            disabled={!filterColumn}
+            onChange={(e) => setMissingOnly(e.target.checked)}
+          />
+          <span className="ws-switch-track"><span /></span>
+          Missing only
+        </label>
+
+        {filtersActive && (
+          <button className="ws-text-btn" onClick={clearFilters}>
+            <FilterX size={14} /> Clear
+          </button>
+        )}
+
+        <div className="ws-chips">
+          {highlightRows && (
+            <span className="ws-chip green">
+              {highlightRows.length.toLocaleString()} rows · <code>{selectedScope}</code>
+            </span>
+          )}
+          {changeSummary && (
+            <span className="ws-chip amber">
+              {changeSummary.cells.toLocaleString()} cells changed in v{changeSummary.version}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="ws-body">
+        <main className="ws-main">
+          <section className="ws-card ws-editor">
             {mainTab === 'data' ? (
               <DataGrid
                 sessionId={session.session_id}
@@ -384,48 +387,39 @@ export default function App({ account = null }) {
             ) : (
               <GraphPanel sessionId={session.session_id} version={version} />
             )}
-          </div>
+          </section>
 
-          {/* Horizontal splitter */}
           {bottomOpen && (
             <Splitter
               orientation="horizontal"
               onResize={(y) =>
-                setBottomHeight(Math.max(100, Math.min(window.innerHeight - 200, window.innerHeight - y)))
+                setBottomHeight(Math.max(120, Math.min(window.innerHeight - 260, window.innerHeight - y - 40)))
               }
             />
           )}
 
-          {/* Bottom panel */}
-          <div className="bottom-panel" style={{ height: bottomOpen ? bottomHeight : 30 }}>
-            <div className="tabbar sub">
+          <section
+            className={`ws-card ws-drawer${bottomOpen ? '' : ' closed'}`}
+            style={bottomOpen ? { height: bottomHeight } : undefined}
+          >
+            <div className="ws-drawer-tabs">
+              {BOTTOM_TABS.map(({ id, label, icon: Icon, title }) => (
+                <button
+                  key={id}
+                  className={bottomTab === id && bottomOpen ? 'on' : ''}
+                  onClick={() => openBottom(id)}
+                  title={title}
+                >
+                  <Icon size={14} /> {label}
+                </button>
+              ))}
+              <span className="ws-grow" />
               <button
-                className={bottomTab === 'problems' ? 'active' : ''}
-                onClick={() => { setBottomTab('problems'); setBottomOpen(true) }}
+                className="ws-icon-btn sm"
+                onClick={() => setBottomOpen((o) => !o)}
+                title={bottomOpen ? 'Collapse panel' : 'Expand panel'}
               >
-                Problems
-              </button>
-              <button
-                className={bottomTab === 'history' ? 'active' : ''}
-                onClick={() => { setBottomTab('history'); setBottomOpen(true) }}
-              >
-                History
-              </button>
-              <button
-                className={bottomTab === 'schema' ? 'active' : ''}
-                onClick={() => { setBottomTab('schema'); setBottomOpen(true) }}
-                title="What the app worked out about your columns"
-              >
-                Schema
-              </button>
-              <button
-                className={bottomTab === 'excel' ? 'active' : ''}
-                onClick={() => { setBottomTab('excel'); setBottomOpen(true) }}
-              >
-                Do it in Excel
-              </button>
-              <button className="panel-collapse" onClick={() => setBottomOpen((o) => !o)}>
-                {bottomOpen ? '▾' : '▴'}
+                {bottomOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
               </button>
             </div>
             {bottomOpen && (
@@ -457,14 +451,10 @@ export default function App({ account = null }) {
                 )}
               </div>
             )}
-          </div>
-        </div>
+          </section>
+        </main>
 
-        {/* ── Slide-in Chat Panel ── */}
-        <div
-          className={`ide-side${chatOpen ? ' chat-open' : ''}`}
-          style={{ width: chatWidth }}
-        >
+        <aside className={`ws-card ws-assistant${chatOpen ? ' open' : ''}`} style={{ '--chat-w': `${chatWidth}px` }}>
           <AgentPanel
             messages={messages}
             input={input}
@@ -479,36 +469,34 @@ export default function App({ account = null }) {
               if (fx) showFormula(fx.excel, fx.label)
             }}
           />
-        </div>
+        </aside>
       </div>
 
       {/* ── Status bar ── */}
-      <footer className="statusbar">
-        <span className="sb-item">
-          {session.row_count.toLocaleString()} rows × {session.column_count} cols
-        </span>
-        <span className="sb-item">
-          {gridStats.filtered.toLocaleString()} shown
-        </span>
-        <span className={`sb-item${version > 0 ? ' accent' : ''}`}>
-          Version {version}
-        </span>
-        {changeSummary && (
-          <span className="sb-item accent">
-            {changeSummary.cells.toLocaleString()} cells changed in v{changeSummary.version}
-          </span>
-        )}
+      <footer className="ws-status">
+        <span>{gridStats.filtered.toLocaleString()} of {session.row_count.toLocaleString()} rows shown</span>
+        <span className={version > 0 ? 'accent' : ''}>Version {version}</span>
         {focusedCell && (
-          <span className="sb-item mono">
-            Row {focusedCell.row} · {focusedCell.column} = {focusedCell.value ?? '∅'}
+          <span className="mono">{cellRef} · {focusedCell.column}</span>
+        )}
+        <span className="ws-grow" />
+        {error && (
+          <span className="err" title={error}>
+            {error}
+            <button onClick={() => setError(null)} title="Dismiss"><X size={12} /></button>
           </span>
         )}
-        <span className="sb-spacer" />
-        {error && <span className="sb-item err">{error}</span>}
-        <span className={`sb-item${agentConfigured ? '' : ' err'}`}>
-          {agentConfigured ? '● Agent ready' : '○ No API key'}
+        <span className={`ws-dot${agentConfigured ? ' ok' : ''}`}>
+          {agentConfigured ? 'Assistant ready' : 'Assistant offline'}
         </span>
       </footer>
     </div>
   )
 }
+
+const BOTTOM_TABS = [
+  { id: 'problems', label: 'Problems', icon: TriangleAlert },
+  { id: 'history', label: 'History', icon: History },
+  { id: 'schema', label: 'Columns', icon: Columns3, title: 'What the app worked out about your columns' },
+  { id: 'excel', label: 'Do it in Excel', icon: SquareFunction },
+]

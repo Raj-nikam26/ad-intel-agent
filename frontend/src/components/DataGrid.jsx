@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { api } from '../api'
 
-const ROW_H = 24        // must match --cell-h in CSS
+const ROW_H = 32        // must match --cell-h in workspace.css
 const CHUNK = 200
 const OVERSCAN = 10
 
@@ -140,19 +140,9 @@ export default function DataGrid({
             : col
         }
       >
-        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, gap: 1, flex: 1, minWidth: 0 }}>
-          {/* Excel column letter */}
-          <span style={{
-            fontSize: 9,
-            color: active ? 'var(--green)' : 'var(--fg-4)',
-            fontFamily: 'var(--mono)',
-            letterSpacing: 0,
-            textTransform: 'none',
-          }}>
-            {colLetter(colIdx)}
-          </span>
-          {/* Column name */}
-          <span className="head-name" style={{ fontSize: 11 }}>{col}</span>
+        <div className="head-stack">
+          <span className="head-letter">{colLetter(colIdx)}</span>
+          <span className="head-name">{col}</span>
         </div>
         {meta?.blank_means && (
           <span className="head-badge semantic" title={meta.blank_means}>ⓘ</span>

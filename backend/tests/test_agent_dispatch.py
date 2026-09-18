@@ -34,15 +34,16 @@ def test_detect_issues_tool_returns_structured_issues():
     assert any(i["type"] == "missing_value" for i in result["issues"])
 
 
-def test_get_advertiser_summary_tool():
+def test_get_entity_summary_tool():
     session = make_session()
-    result = execute_tool_call("get_advertiser_summary", {"advertiser": "Acme Corp"}, session)
-    assert result["total_ad_insertions"] == 2
+    result = execute_tool_call("get_entity_summary", {"entity": "Acme Corp"}, session)
+    assert result["row_count"] == 2
+    assert result["linked"]["Publication"] == ["Herald", "Times"]
 
 
-def test_get_advertiser_summary_unknown_advertiser():
+def test_get_entity_summary_unknown_value():
     session = make_session()
-    result = execute_tool_call("get_advertiser_summary", {"advertiser": "Nope Inc"}, session)
+    result = execute_tool_call("get_entity_summary", {"entity": "Nope Inc"}, session)
     assert "error" in result
 
 

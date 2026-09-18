@@ -70,6 +70,7 @@ class AuditLogEntry(BaseModel):
     reason: str
     diff_preview: list[dict[str, Any]]
     excel: dict[str, Any] | None = None
+    user_id: str | None = None
 
 
 class HistoryResponse(BaseModel):
@@ -146,3 +147,22 @@ class DiffResponse(BaseModel):
     added_columns: list[str]
     removed_columns: list[str]
     truncated: bool
+
+
+class MappingResponse(BaseModel):
+    """What the app worked out about this file's columns, and what the
+    user can change about it."""
+    session_id: str
+    subject: str | None
+    entities: list[str]
+    measures: list[str]
+    dates: list[str]
+    flags: dict[str, str]
+    roles: dict[str, str]
+    columns: list[dict[str, Any]]
+
+
+class MappingRequest(BaseModel):
+    subject: str | None = None
+    entities: list[str] | None = None
+    flags: list[str] | None = None

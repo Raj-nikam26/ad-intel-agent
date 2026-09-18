@@ -1,0 +1,63 @@
+digraph prod {
+  rankdir=TB; compound=true; bgcolor="white";
+  nodesep=0.30; ranksep=0.55;
+  node [shape=box, style="filled", fillcolor="#eef1f6", color="#5a6472", penwidth=1.3,
+        fontname="Arial", fontsize=11, height=0.55, width=1.9, margin="0.14,0.08"];
+  edge [color="#6b7585", penwidth=1.3, arrowsize=0.75, fontname="Arial", fontsize=9, fontcolor="#445061"];
+
+  subgraph cluster_client {
+    label=<<FONT POINT-SIZE="9" COLOR="#7a8697"><B>CLIENT</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#fbfcfd"; color="#c8d0dc"; margin=12;
+    user [label=<<B>Analyst / Recruiter</B><BR/><FONT POINT-SIZE="9">browser</FONT>>, shape=box, fillcolor="#ffffff"];
+    ui [label=<<B>Excel-style workspace</B><BR/><FONT POINT-SIZE="9">grid · assistant · history · Excel formulas</FONT>>, width=3.4];
+    {rank=same; user; ui;}
+    user -> ui [style=invis];
+  }
+
+  subgraph cluster_edge {
+    label=<<FONT POINT-SIZE="9" COLOR="#6b3fb0"><B>EDGE</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#faf7fe"; color="#b58cff"; margin=12;
+    cdn [label=<<B>Static hosting / CDN</B><BR/><FONT POINT-SIZE="9">serves the web app</FONT>>];
+    gw [label=<<B>API gateway</B><BR/><FONT POINT-SIZE="9">login · rate limits · HTTPS</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0", penwidth=2];
+    {rank=same; cdn; gw;}
+  }
+
+  subgraph cluster_app {
+    label=<<FONT POINT-SIZE="9" COLOR="#7a8697"><B>APPLICATION  ·  stateless services, scale horizontally</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#fbfcfd"; color="#c8d0dc"; margin=12;
+    data [label=<<B>Data service</B><BR/><FONT POINT-SIZE="9">upload · browse · diff · export</FONT>>];
+    agent [label=<<B>Agent service</B><BR/><FONT POINT-SIZE="9">plans the answer · picks tools</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8", penwidth=2];
+    rag [label=<<B>Graph retrieval</B><BR/><FONT POINT-SIZE="9">entity lookup · graph queries</FONT>>, fillcolor="#dbe7f6", color="#3a6fa8", penwidth=2];
+    edit [label=<<B>Edit service</B><BR/><FONT POINT-SIZE="9">fixed, audited operations</FONT>>, fillcolor="#e6dbf7", color="#6b3fb0", penwidth=2];
+    sync [label=<<B>Graph sync worker</B><BR/><FONT POINT-SIZE="9">applies each edit to the graph</FONT>>];
+    {rank=same; data; agent; rag; edit; sync;}
+    data -> agent -> rag -> edit -> sync [style=invis];
+  }
+
+  subgraph cluster_store {
+    label=<<FONT POINT-SIZE="9" COLOR="#2a6f4e"><B>DATA</B></FONT>>; labeljust=l;
+    style="filled,rounded"; fillcolor="#f7fbf9"; color="#9ecfb5"; margin=12;
+    pg [label=<<B>PostgreSQL</B><BR/><FONT POINT-SIZE="9">users · sessions · versions<BR/>audit log · chat history</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.9];
+    obj [label=<<B>Object storage</B><BR/><FONT POINT-SIZE="9">file snapshot per version</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.9];
+    neo [label=<<B>Neo4j</B><BR/><FONT POINT-SIZE="9">knowledge graph<BR/>+ vector index for names</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.9];
+    redis [label=<<B>Redis</B><BR/><FONT POINT-SIZE="9">cache · job queue</FONT>>, shape=cylinder, fillcolor="#d6ece0", color="#2a6f4e", penwidth=2, height=0.9];
+    {rank=same; pg; obj; neo; redis;}
+    pg -> obj -> neo -> redis [style=invis];
+  }
+
+  llm [label=<<B>LLM provider</B><BR/><FONT POINT-SIZE="9">reasoning + embeddings</FONT>>, style="filled,dashed", fillcolor="#fff6e5", color="#b7791f", penwidth=1.6];
+
+  ui -> cdn [ltail=cluster_client, lhead=cluster_edge];
+  gw -> agent [lhead=cluster_app];
+  data -> pg [label="metadata"];
+  data -> obj [label="snapshots"];
+  rag -> neo [label="Cypher + vector search"];
+  edit -> pg [label="new version + audit"];
+  edit -> redis [label="change event"];
+  redis -> sync [constraint=false, label="queue", style=dashed];
+  sync -> neo [label="update nodes"];
+  agent -> rag [label="retrieve facts", constraint=false, color="#3a6fa8", fontcolor="#3a6fa8", penwidth=1.8];
+  agent -> edit [label="on instruction", constraint=false, color="#6b3fb0", fontcolor="#6b3fb0"];
+  agent -> llm [label="prompt + retrieved facts", constraint=false];
+  agent -> redis [style=dashed, label="cache"];
+}

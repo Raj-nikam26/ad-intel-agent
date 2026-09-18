@@ -43,7 +43,7 @@ import pandas as pd
 
 from app import excel_formulas
 from app.diagnostics import run_full_diagnostics, run_scoped_diagnostics, Issue
-from app.graph_builder import build_graph, advertiser_summary, advertisers_by_category_and_office
+from app import graph_backend
 from app.safe_editor import apply_operation, EditValidationError
 from app.safe_executor import run_expression, UnsafeExpressionError, ExecutionError
 from app.data_store import session_store, Session, VersionConflictError
@@ -54,31 +54,59 @@ EXCEL_KEY = "_excel"
 
 logger = logging.getLogger("ad_intel.agent")
 
-SYSTEM_PROMPT = """You are an assistant for an ad-tracking dataset (newspaper \
-ad insertions: advertiser, publication, category, location, size, etc). \
-The data is NOT pre-cleaned - report issues honestly rather than assuming \
-the data should look a certain way.
+SYSTEM_PROMPT = """You are an assistant for a spreadsheet the user has uploaded. The data is NOT pre-cleaned - report what you find honestly rather than assuming the data should look a certain way.
 
-You have tools to: check for data-quality issues (never fixes anything), \
-answer relational questions using a graph of advertisers/publications/\
-categories/locations, answer flat filter/aggregate questions on the table, \
-and apply a specific, scoped edit ONLY when the user explicitly asks you to \
-fix/change/update something.
+You have tools to: check for data-quality issues (never changes anything), answer relational questions using a knowledge graph built from the file's columns, answer flat filter/aggregate questions on the table, and apply a specific, scoped edit ONLY when the user explicitly asks you to fix, change or update something.
 
 Rules:
-- Never call apply_edit unless the user has explicitly asked for a change \
-  in this message or the immediately preceding one.
-- When calling apply_edit, use row_indices and column values that came from \
-  a prior detect_issues or query result in this conversation - never invent them.
-- Always explain what you found or what you changed in plain language after \
-  a tool call, don't just show raw tool output.
-- When calling tabular_query, also supply excel_formula: a single Excel \
-  formula giving the same result on the user's sheet, using the column \
-  letters and row range from the sheet layout below. Leave it empty if \
-  there is no sensible single-formula equivalent.
+- Never call apply_edit unless the user has explicitly asked for a change   in this message or the immediately preceding one.
+- When calling apply_edit, use row_indices and column values that came from   a prior detect_issues or query result in this conversation - never invent them.
+- Always explain what you found or what you changed in plain language after   a tool call, don't just show raw tool output.
+- Graph tools need exact stored values. If the user's wording might differ   (case, spelling, partial), call resolve_entity first and use the best match.
+- Answer graph questions only from what the graph tools return.
+- When calling tabular_query, also supply excel_formula: a single Excel   formula giving the same result on the user's sheet, using the column   letters and row range from the sheet layout below. Leave it empty if   there is no sensible single-formula equivalent.
 """
 
+
+def schema_note(session: Session) -> str:
+    """Tells the model what this particular file contains, so the same
+    tools work whatever was uploaded."""
+    from app.schema_profile import infer_mapping
+
+    if session.mapping is None:
+        session.mapping = infer_mapping(session.current_df)
+    m = session.mapping
+    parts = [f"This file is '{session.filename}' with {len(session.current_df):,} rows."]
+    if m.get("subject"):
+        parts.append(f"Each row is mainly about '{m['subject']}' - that is the subject of graph questions.")
+    if m.get("entities"):
+        parts.append("Attributes linked in the graph: " + ", ".join(m["entities"]) + ".")
+    if m.get("measures"):
+        parts.append("Numeric columns: " + ", ".join(m["measures"]) + ".")
+    if m.get("flags"):
+        parts.append("Columns where a blank means 'no', not missing data: " + ", ".join(m["flags"]) + ".")
+    return " ".join(parts)
+
+
 TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_entity",
+            "description": "Find the exact name of an advertiser, publication, category, sub-category, location or sales office in the knowledge graph from a partial or misspelled name. Call this before a graph tool whenever the user's wording may not match a stored name exactly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The name as the user wrote it."},
+                    "entity_type": {
+                        "type": "string",
+                        "enum": ["Advertiser", "Publication", "Category", "SubCategory", "Location", "SalesOffice"],
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -98,27 +126,30 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "get_advertiser_summary",
-            "description": "Get a graph-based summary of one advertiser: publications used, categories, editions, locations, sales offices, house-ad count. Use for questions about a specific advertiser's overall activity.",
+            "name": "get_entity_summary",
+            "description": "Graph summary of one subject value: how many rows it covers and its distinct values in every linked column. Use for questions about one thing's overall activity.",
             "parameters": {
                 "type": "object",
-                "properties": {"advertiser": {"type": "string"}},
-                "required": ["advertiser"],
+                "properties": {"entity": {"type": "string", "description": "The subject value, exactly as stored."}},
+                "required": ["entity"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "find_advertisers_by_category_and_office",
-            "description": "Find advertisers serviced by a given sales office that also advertised in a given category. Use for multi-hop relational questions joining sales office and category.",
+            "name": "find_by_attributes",
+            "description": "Find subjects linked to ALL of the given column/value pairs. The values may come from different rows of the same subject. Use for multi-hop questions joining two or more attributes.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "category": {"type": "string"},
-                    "sales_office": {"type": "string"},
+                    "criteria": {
+                        "type": "object",
+                        "description": "Column name to value, e.g. {\"Category\": \"Bank/Finance\", \"AdvertiserSalesOffice\": \"PUNE\"}",
+                        "additionalProperties": {"type": "string"},
+                    },
                 },
-                "required": ["category", "sales_office"],
+                "required": ["criteria"],
             },
         },
     },
@@ -168,7 +199,8 @@ TOOL_DEFINITIONS = [
 ]
 
 
-def execute_tool_call(name: str, arguments: dict, session: Session) -> dict:
+def execute_tool_call(name: str, arguments: dict, session: Session,
+                      user_id: str | None = None) -> dict:
     """
     Pure dispatcher: given a tool name + arguments + the session (for its
     current dataframe / graph), runs the corresponding logic and returns
@@ -189,15 +221,20 @@ def execute_tool_call(name: str, arguments: dict, session: Session) -> dict:
             ],
         }
 
-    if name == "get_advertiser_summary":
-        g = build_graph(df)
-        result = advertiser_summary(g, arguments["advertiser"])
-        return result or {"error": f"Advertiser '{arguments['advertiser']}' not found in graph."}
+    if name == "resolve_entity":
+        matches = graph_backend.resolve_entity(session, arguments["text"], arguments.get("entity_type"))
+        return {"matches": matches} if matches else {"matches": [], "note": "No graph entity resembles that name."}
 
-    if name == "find_advertisers_by_category_and_office":
-        g = build_graph(df)
-        result = advertisers_by_category_and_office(g, arguments["category"], arguments["sales_office"])
-        return {"advertisers": result, "count": len(result)}
+    if name == "get_entity_summary":
+        value = arguments["entity"]
+        result = graph_backend.entity_summary(session, value)
+        return result or {"error": f"'{value}' is not a subject in the graph. "
+                                   "Use resolve_entity to find the exact name."}
+
+    if name == "find_by_attributes":
+        criteria = arguments.get("criteria") or {}
+        result = graph_backend.find_by_attributes(session, criteria)
+        return {"matches": result, "count": len(result), "criteria": criteria}
 
     if name == "tabular_query":
         try:
@@ -263,6 +300,7 @@ def execute_tool_call(name: str, arguments: dict, session: Session) -> dict:
                 reason=arguments.get("reason", ""),
                 diff_preview=preview,
                 excel=excel,
+                user_id=user_id,
             )
         except VersionConflictError as e:
             return {"error": str(e)}
@@ -277,7 +315,8 @@ def execute_tool_call(name: str, arguments: dict, session: Session) -> dict:
     return {"error": f"Unknown tool: {name}"}
 
 
-def run_agent_turn(session: Session, user_message: str, model: str, api_key: str) -> dict:
+def run_agent_turn(session: Session, user_message: str, model: str, api_key: str,
+                   user_id: str | None = None) -> dict:
     """
     Runs one full agent turn: sends the message + history + tools to the
     LLM via OpenRouter, executes any requested tool calls, and loops
@@ -320,7 +359,7 @@ def run_agent_turn(session: Session, user_message: str, model: str, api_key: str
             args = json.loads(tc.function.arguments)
             logger.info("Agent invoking tool=%s args=%s", tc.function.name, args)
             df_before = session.current_df
-            result = execute_tool_call(tc.function.name, args, session)
+            result = execute_tool_call(tc.function.name, args, session, user_id=user_id)
 
             excel = result.pop(EXCEL_KEY, None) if isinstance(result, dict) else None
             if excel is None and tc.function.name != "apply_edit":

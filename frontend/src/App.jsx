@@ -8,6 +8,7 @@ import AgentPanel from './components/AgentPanel'
 import Splitter from './components/Splitter'
 import LandingPage from './components/LandingPage'
 import FormulaPanel from './components/FormulaPanel'
+import SchemaPanel from './components/SchemaPanel'
 
 const SESSION_KEY = 'adintel.session'
 
@@ -33,7 +34,7 @@ import {
  * The AI chat panel slides in from the right on demand.
  * Landing page replaces the bare upload card.
  */
-export default function App() {
+export default function App({ account = null }) {
   const [session, setSession] = useState(null)
   const [version, setVersion] = useState(0)
   const [agentConfigured, setAgentConfigured] = useState(true)
@@ -224,6 +225,7 @@ export default function App() {
     if (restoring) return <div className="boot">Opening your last file…</div>
     return (
       <LandingPage
+        account={account}
         onUpload={handleUpload}
         onSample={() => start(api.sample)}
         uploading={uploading}
@@ -309,10 +311,13 @@ export default function App() {
             <button className="tb-close" onClick={closeFile} title="Close this file and open another">
               Close file
             </button>
-            <a className="tb-export" href={api.exportUrl(session.session_id)}>
+            <button
+              className="tb-export"
+              onClick={() => api.exportFile(session.session_id, `edited_v${version}.xlsx`).catch((e) => setError(e.message))}
+            >
               <Download size={13} />
               Export v{version}
-            </a>
+            </button>
             <button
               className={`tb-chat-toggle${chatOpen ? ' active' : ''}`}
               onClick={() => setChatOpen((o) => !o)}
@@ -321,6 +326,12 @@ export default function App() {
               <MessageSquare size={13} />
               AI Assistant
             </button>
+            {account && (
+              <div className="tb-account" title={account.email || account.name}>
+                <span className="tb-account-name">{account.name}</span>
+                {account.button}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -401,6 +412,13 @@ export default function App() {
                 History
               </button>
               <button
+                className={bottomTab === 'schema' ? 'active' : ''}
+                onClick={() => { setBottomTab('schema'); setBottomOpen(true) }}
+                title="What the app worked out about your columns"
+              >
+                Schema
+              </button>
+              <button
                 className={bottomTab === 'excel' ? 'active' : ''}
                 onClick={() => { setBottomTab('excel'); setBottomOpen(true) }}
               >
@@ -428,6 +446,11 @@ export default function App() {
                     onSelectVersion={(v) => { setSelectedVersion(v); loadDiff(v) }}
                     onRestored={onRestored}
                     onShowFormula={(e) => showFormula(e.excel, `v${e.version} · ${e.reason}`)}
+                  />
+                ) : bottomTab === 'schema' ? (
+                  <SchemaPanel
+                    sessionId={session.session_id}
+                    onChanged={() => setVersion((v) => v)}
                   />
                 ) : (
                   <FormulaPanel entry={formulaEntry} />

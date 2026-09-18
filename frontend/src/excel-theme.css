@@ -1,0 +1,156 @@
+/* Microsoft Excel look. Loaded after App.css and overrides its tokens:
+   Excel green, Segoe UI chrome, Calibri cells, flat grey chrome. */
+:root {
+  --xl-green: #217346;
+  --xl-green-dark: #185c37;
+  --xl-green-tint: #e7f1ea;
+  --xl-chrome: #f3f2f1;
+  --xl-line: #e1dfdd;
+  --xl-text: #252423;
+  --xl-muted: #605e5c;
+
+  --font: "Segoe UI", -apple-system, system-ui, sans-serif;
+  --green-500: var(--xl-green);
+  --green-600: var(--xl-green);
+  --green-700: var(--xl-green-dark);
+  --indigo-500: var(--xl-green);
+  --indigo-600: var(--xl-green-dark);
+  --indigo-50: var(--xl-green-tint);
+  --indigo-100: var(--xl-green-tint);
+  --grid-line: #d4d4d4;
+  --grid-header: var(--xl-chrome);
+  --row-odd: #ffffff;
+  --row-hover: #f5f5f5;
+  --cell-changed: #fff4ce;
+}
+
+body { font-family: var(--font); color: var(--xl-text); background: #fff; }
+
+/* title bar */
+.titlebar { background: var(--xl-green) !important; border-bottom: 0 !important; box-shadow: none !important; }
+.titlebar .tb-app-logo, .titlebar .tb-app-name, .titlebar .tb-filename { color: #fff !important; }
+.titlebar .tb-version { background: rgba(255,255,255,.18) !important; color: #fff !important; border: 0 !important; }
+.titlebar .tb-center { background: #fff; border: 1px solid #c8c6c4; border-radius: 0; gap: 0; padding-right: 6px; }
+.tb-namebox { min-width: 70px; height: 26px; line-height: 26px; padding: 0 8px; border-right: 1px solid #c8c6c4; font-size: 12px; color: var(--xl-text); }
+.titlebar .tb-formula-label { color: var(--xl-muted) !important; font-style: italic; padding: 0 10px; border-right: 1px solid var(--xl-line); background: none !important; }
+.tb-cellvalue { max-width: 260px; padding: 0 10px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--xl-line); }
+.titlebar .tb-search { border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.titlebar .tb-export, .titlebar .tb-chat-toggle, .tb-close {
+  border-radius: 2px !important; box-shadow: none !important; font-size: 12px; cursor: pointer;
+  background: rgba(255,255,255,.14) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.35) !important;
+}
+.tb-close { height: 28px; padding: 0 10px; font-family: var(--font); }
+.titlebar .tb-chat-toggle.active { background: #fff !important; color: var(--xl-green) !important; }
+
+/* sheet tabs */
+.tabbar { background: var(--xl-chrome) !important; border-color: var(--xl-line) !important; }
+.tabbar button { border-radius: 0 !important; color: var(--xl-muted) !important; }
+.tabbar button.active { background: #fff !important; color: var(--xl-green) !important; font-weight: 600; box-shadow: inset 0 -2px 0 var(--xl-green) !important; }
+
+/* grid */
+.grid-header { background: var(--xl-chrome) !important; border-bottom: 1px solid #c8c6c4 !important; }
+.grid-row { background: #fff !important; }
+.grid-row:hover { background: #f5f5f5 !important; }
+.grid-cell { font-family: Calibri, "Segoe UI", sans-serif !important; font-size: 13px !important; color: #000 !important; border-color: #d4d4d4 !important; }
+.grid-head-cell { font-family: var(--font) !important; font-size: 11.5px !important; font-weight: 600 !important; color: #444 !important; background: var(--xl-chrome) !important; text-transform: none !important; }
+.grid-head-cell.sorted { background: #d3f0e0 !important; box-shadow: inset 0 -2px 0 var(--xl-green); }
+.grid-cell.rownum { background: var(--xl-chrome) !important; color: #666 !important; font-family: var(--font) !important; font-size: 11.5px !important; justify-content: center; }
+.grid-cell.selected { outline: 2px solid var(--xl-green); outline-offset: -2px; z-index: 2; }
+.grid-cell.changed { background: #fff4ce !important; }
+.grid-cell.missing { color: #c50f1f !important; background: #fdf3f4 !important; }
+.grid-row.highlighted .grid-cell:not(.rownum) { background: var(--xl-green-tint) !important; }
+
+/* drawer, status bar, chat */
+.bottom-panel { background: #fff !important; border-top: 1px solid #c8c6c4 !important; }
+.statusbar { background: var(--xl-chrome) !important; color: #444 !important; border-top: 1px solid var(--xl-line) !important; }
+.ide-side { background: #fff !important; border-left: 1px solid #c8c6c4 !important; box-shadow: none !important; }
+.agent-head { background: var(--xl-chrome) !important; }
+.agent-avatar, .agent-send-btn { background: var(--xl-green) !important; border-radius: 2px !important; box-shadow: none !important; }
+.msg.user .msg-text { background: var(--xl-green-tint) !important; color: var(--xl-text) !important; border-radius: 2px !important; }
+.msg.assistant .msg-text { background: #fafafa !important; border: 1px solid var(--xl-line) !important; border-radius: 2px !important; }
+.msg-fx { margin-top: 6px; font: 600 12px var(--font); color: var(--xl-green); background: none; border: 1px solid #b7d6c2; border-radius: 2px; padding: 3px 8px; cursor: pointer; }
+.msg-fx:hover { background: var(--xl-green-tint); }
+
+/* history table */
+.hist-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.hist-table th { position: sticky; top: 0; background: var(--xl-chrome); text-align: left; font-weight: 600; color: #444; padding: 5px 10px; border-bottom: 1px solid #c8c6c4; }
+.hist-table td { padding: 6px 10px; border-bottom: 1px solid #edebe9; }
+.hist-table tr { cursor: pointer; }
+.hist-table tr:hover td { background: #f5f5f5; }
+.hist-table tr.selected td { background: var(--xl-green-tint); }
+.hist-table tr.current td:first-child { box-shadow: inset 3px 0 0 var(--xl-green); }
+.hist-v { font-weight: 600; white-space: nowrap; }
+.hist-badge { margin-left: 6px; font-size: 10.5px; font-weight: 600; color: var(--xl-green-dark); background: #d3f0e0; padding: 1px 6px; }
+.hist-why { max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--xl-muted); }
+.hist-when { white-space: nowrap; color: var(--xl-muted); }
+.hist-table .num { text-align: right; }
+.hist-actions { text-align: right; white-space: nowrap; }
+.xl-btn { font: 12px var(--font); padding: 3px 12px; border: 1px solid #8a8886; background: #fff; border-radius: 2px; cursor: pointer; }
+.xl-btn:hover:not(:disabled) { background: var(--xl-chrome); }
+.xl-btn:disabled { opacity: .5; }
+.link-btn { font: 12px var(--font); color: var(--xl-green); background: none; border: 0; cursor: pointer; margin-right: 8px; text-decoration: underline; }
+
+/* "Do it in Excel" drawer */
+.fx-panel { padding: 10px 14px 16px; font-size: 12.5px; overflow: auto; height: 100%; }
+.fx-source { color: var(--xl-muted); margin-bottom: 8px; }
+.fx-item { border: 1px solid var(--xl-line); padding: 10px 12px; margin-bottom: 10px; }
+.fx-item h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.fx-flag { font-size: 10.5px; color: #8a5300; background: #fff4ce; padding: 1px 6px; }
+.fx-formula { margin-bottom: 8px; }
+.fx-label { color: var(--xl-muted); margin-bottom: 3px; display: flex; gap: 10px; }
+.fx-expected { color: var(--xl-green-dark); }
+.fx-code-row { display: flex; margin-bottom: 4px; }
+.fx-code-row code { flex: 1; font-family: Consolas, monospace; font-size: 12px; border: 1px solid #c8c6c4; border-right: 0; padding: 5px 8px; overflow-x: auto; white-space: pre; }
+.fx-copy { font: 12px var(--font); border: 1px solid #c8c6c4; background: var(--xl-chrome); padding: 0 12px; cursor: pointer; }
+.fx-steps { margin: 6px 0 6px 18px; padding: 0; line-height: 1.6; }
+.fx-note { margin: 4px 0 0; color: var(--xl-muted); font-size: 12px; }
+
+/* landing */
+.hero-error { margin-top: 12px; color: #c50f1f; font-size: 13px; }
+.boot { height: 100vh; display: grid; place-items: center; color: var(--xl-muted); }
+.hero-mesh, .hero-grid { display: none !important; }
+.btn-primary-lg { background: var(--xl-green) !important; box-shadow: none !important; border-radius: 3px !important; }
+.btn-secondary-lg { border-radius: 3px !important; box-shadow: none !important; }
+.hero-title-em { background: none !important; -webkit-text-fill-color: var(--xl-green) !important; color: var(--xl-green) !important; }
+
+/* schema panel */
+.schema-panel { height: 100%; display: flex; flex-direction: column; font-size: 12.5px; }
+.schema-head {
+  display: flex; align-items: center; gap: 14px; padding: 8px 14px;
+  border-bottom: 1px solid var(--xl-line); color: var(--xl-muted); background: #fbfbfa;
+}
+.schema-head span { flex: 1; }
+.schema-panel .tbl-scroll { overflow: auto; flex: 1; }
+.schema-role { font: 12px var(--font); padding: 2px 6px; border: 1px solid #c8c6c4; border-radius: 2px; background: #fff; }
+.schema-table tr.current td { background: var(--xl-green-tint); }
+.schema-ex { color: var(--xl-muted); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The header is a separate element from the scrolling body, so it is kept
+   at container width and clipped; its scrollLeft is driven by the body's.
+   Giving it max-content width would leave nothing to scroll. */
+.grid-header { overflow: hidden !important; flex: none; width: auto; min-width: 0; }
+.grid-row { width: max-content; min-width: 100%; }
+.grid-header > .grid-cell { flex: none; }
+
+/* Let flex size the editor and the drawer instead of the inline
+   calc() height, which overlapped the drawer once the chat panel opened. */
+.ide-main { display: flex; flex-direction: column; min-height: 0; }
+.editor-area { flex: 1 1 auto; min-height: 0; height: auto !important; }
+.bottom-panel { flex: none; display: flex; flex-direction: column; overflow: hidden; }
+.bottom-panel .tabbar.sub { flex: none; }
+.bottom-content { flex: 1; min-height: 0; overflow: auto; }
+.panel-empty, .panel-error { padding: 12px 14px; color: var(--xl-muted); }
+
+/* sign-in */
+.signin { height: 100vh; display: grid; place-items: center; background: var(--xl-chrome); font-family: var(--font); }
+.signin-card { background: #fff; border: 1px solid var(--xl-line); padding: 36px 40px; width: min(380px, 90vw); text-align: center; }
+.signin-mark { width: 44px; height: 44px; margin: 0 auto 14px; display: grid; place-items: center; background: var(--xl-green); color: #fff; font-size: 22px; }
+.signin-card h1 { font-size: 20px; margin: 0 0 6px; color: var(--xl-text); }
+.signin-card p { color: var(--xl-muted); font-size: 13px; margin: 0 0 20px; }
+.signin-btn { display: block; padding: 10px; background: var(--xl-green); color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; }
+.signin-btn:hover { background: var(--xl-green-dark); }
+.signin-card .signin-error { color: #c50f1f; margin: 14px 0 0; }
+.tb-user { display: flex; align-items: center; gap: 6px; }
+.tb-user img, .tb-avatar { width: 24px; height: 24px; border-radius: 50%; }
+.tb-avatar { display: grid; place-items: center; background: #fff; color: var(--xl-green); font-size: 12px; font-weight: 700; }
+.tb-signout { background: none; border: 0; color: #fff; font: 12px var(--font); cursor: pointer; text-decoration: underline; }

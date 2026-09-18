@@ -39,28 +39,32 @@ import math
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from app.agent import run_agent_turn
+from app.auth import current_user, optional_user, owns, router as auth_router
 from app.config import settings
 from app.data_store import session_store, Session, VersionConflictError
-from app.diagnostics import (
-    run_full_diagnostics, run_scoped_diagnostics,
-    NON_MISSING_SEMANTICS, GAP_CHECK_COLUMNS,
-)
+from app.diagnostics import run_full_diagnostics, run_scoped_diagnostics, semantic_blanks
+from app.schema_profile import gap_columns, infer_mapping
 from app.diff import diff_versions
-from app.graph_cache import get_graph
+from app.graph_cache import get_graph, invalidate_session
+from app.graph_sync import on_new_version
 from app.schemas import (
     UploadResponse, ColumnMeta, DataPage, ChatRequest, ChatResponse,
     HistoryResponse, AuditLogEntry, RevertRequest, RevertResponse,
+    MappingResponse, MappingRequest,
     IssuesResponse, IssueOut, GraphStats, GraphNode, GraphEdge, GraphView,
     DiffResponse,
 )
 
 logging.basicConfig(level=settings.log_level, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("ad_intel.main")
+
+# Every saved version is mirrored into the knowledge graph (no-op unless NEO4J_URI is set).
+session_store.add_listener(on_new_version)
 
 app = FastAPI(
     title="Ad Intelligence Agent",
@@ -70,6 +74,8 @@ app = FastAPI(
                  "auto-cleaned.",
     version="2.0.0",
 )
+
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -84,9 +90,13 @@ app.add_middleware(
 # helpers
 # --------------------------------------------------------------------------
 
-def _require_session(session_id: str) -> Session:
+def _require_session(session_id: str, user: dict | None = None) -> Session:
     session = session_store.get(session_id)
     if session is None:
+        raise HTTPException(status_code=404, detail="Session not found. Please re-upload.")
+    if not owns(session, user):
+        # 404 rather than 403: someone guessing ids learns nothing about
+        # which of them exist.
         raise HTTPException(status_code=404, detail="Session not found. Please re-upload.")
     return session
 
@@ -138,7 +148,16 @@ def _records(df: pd.DataFrame) -> list[dict[str, Any]]:
     return out
 
 
-def _column_meta(df: pd.DataFrame) -> list[ColumnMeta]:
+def _mapping(session: Session) -> dict:
+    """The inferred schema for this session, worked out once."""
+    if session.mapping is None:
+        session.mapping = infer_mapping(session.current_df)
+    return session.mapping
+
+
+def _column_meta(df: pd.DataFrame, mapping: dict) -> list[ColumnMeta]:
+    blanks = semantic_blanks(df, mapping)
+    checked = set(gap_columns(mapping))
     meta = []
     for col in df.columns:
         missing = int((df[col].isna() | (df[col].astype(str).str.strip() == "")).sum())
@@ -146,8 +165,8 @@ def _column_meta(df: pd.DataFrame) -> list[ColumnMeta]:
             name=col,
             dtype=str(df[col].dtype),
             missing_count=missing,
-            blank_means=NON_MISSING_SEMANTICS.get(col),
-            is_gap_checked=col in GAP_CHECK_COLUMNS and col not in NON_MISSING_SEMANTICS,
+            blank_means=blanks.get(col),
+            is_gap_checked=col in checked and col not in blanks,
         ))
     return meta
 
@@ -164,14 +183,14 @@ def _session_payload(session: Session) -> UploadResponse:
         row_count=len(df),
         column_count=len(df.columns),
         columns=df.columns.tolist(),
-        column_meta=_column_meta(df),
+        column_meta=_column_meta(df, _mapping(session)),
         preview=_records(df.head(5)),
         current_version=_current_version(session),
         transcript=session.transcript,
     )
 
 
-def _start_session(contents: bytes, filename: str) -> UploadResponse:
+def _start_session(contents: bytes, filename: str, owner_id: str | None = None) -> UploadResponse:
     try:
         # Deliberately NO cleaning step here - the data is stored exactly
         # as uploaded. See diagnostics.py for read-only issue detection
@@ -183,7 +202,7 @@ def _start_session(contents: bytes, filename: str) -> UploadResponse:
     if df.empty:
         raise HTTPException(status_code=400, detail="Uploaded file has no rows.")
 
-    session = session_store.create(df, filename=filename)
+    session = session_store.create(df, filename=filename, owner_id=owner_id)
     logger.info("Session created: %s (%s rows, %s columns)", session.session_id, len(df), len(df.columns))
     return _session_payload(session)
 
@@ -193,12 +212,17 @@ def _start_session(contents: bytes, filename: str) -> UploadResponse:
 # --------------------------------------------------------------------------
 
 @app.get("/health")
-def health():
-    return {"status": "ok", "agent_configured": bool(settings.openrouter_api_key)}
+def health(request: Request):
+    return {
+        "status": "ok",
+        "agent_configured": bool(settings.openrouter_api_key),
+        "auth_enabled": settings.auth_enabled,
+        "user": optional_user(request),
+    }
 
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), user: dict | None = Depends(current_user)):
     if not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Please upload an .xlsx or .xls file.")
 
@@ -206,27 +230,85 @@ async def upload_file(file: UploadFile = File(...)):
     if len(contents) / (1024 * 1024) > settings.max_upload_size_mb:
         raise HTTPException(status_code=400, detail=f"File exceeds {settings.max_upload_size_mb} MB limit.")
 
-    return _start_session(contents, file.filename)
+    return _start_session(contents, file.filename, owner_id=user["id"] if user else None)
 
 
 @app.post("/sample", response_model=UploadResponse)
-def start_sample():
+def start_sample(user: dict | None = Depends(current_user)):
     """Opens the bundled dataset. Someone trying a deployed copy of the app
     has no file of their own, and should not need one to see it work."""
     path = settings.resolved_sample_file
     if not path.is_file():
         raise HTTPException(status_code=404, detail="The sample file is not available on this server.")
-    return _start_session(path.read_bytes(), path.name)
+    return _start_session(path.read_bytes(), path.name, owner_id=user["id"] if user else None)
 
 
 @app.get("/session/{session_id}", response_model=UploadResponse)
-def reopen_session(session_id: str):
-    return _session_payload(_require_session(session_id))
+def reopen_session(session_id: str, user: dict | None = Depends(current_user)):
+    return _session_payload(_require_session(session_id, user))
+
+
+def _mapping_payload(session: Session) -> MappingResponse:
+    m = _mapping(session)
+    return MappingResponse(
+        session_id=session.session_id,
+        subject=m.get("subject"), entities=m.get("entities", []),
+        measures=m.get("measures", []), dates=m.get("dates", []),
+        flags=m.get("flags", {}), roles=m.get("roles", {}), columns=m.get("columns", []),
+    )
+
+
+@app.get("/mapping/{session_id}", response_model=MappingResponse)
+def get_mapping(session_id: str, user: dict | None = Depends(current_user)):
+    """The inferred column roles. The guess is visible so it can be corrected."""
+    return _mapping_payload(_require_session(session_id, user))
+
+
+@app.post("/mapping/{session_id}", response_model=MappingResponse)
+def set_mapping(session_id: str, request: MappingRequest, user: dict | None = Depends(current_user)):
+    """Overrides the inferred roles. The graph is rebuilt from the new
+    mapping, because which column is the subject changes its whole shape."""
+    session = _require_session(session_id, user)
+    m = dict(_mapping(session))
+    columns = set(session.current_df.columns)
+
+    if request.subject is not None:
+        if request.subject not in columns:
+            raise HTTPException(status_code=400, detail=f"Unknown column '{request.subject}'.")
+        m["subject"] = request.subject
+    if request.entities is not None:
+        unknown = [c for c in request.entities if c not in columns]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"Unknown column(s): {', '.join(unknown)}.")
+        m["entities"] = [c for c in request.entities if c != m.get("subject")]
+    if request.flags is not None:
+        unknown = [c for c in request.flags if c not in columns]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"Unknown column(s): {', '.join(unknown)}.")
+        m["flags"] = {c: "Blank means 'no' - set by you, not inferred." for c in request.flags}
+
+    roles = dict(m["roles"])
+    for col in columns:
+        if col == m.get("subject"):
+            roles[col] = "subject"
+        elif col in m.get("entities", []):
+            roles[col] = "entity"
+        elif col in m.get("flags", {}):
+            roles[col] = "flag"
+        elif roles.get(col) in ("subject", "entity", "flag"):
+            roles[col] = "text"
+    m["roles"] = roles
+    session.mapping = m
+
+    invalidate_session(session_id)
+    on_new_version(session_id, _current_version(session), None, session.current_df)
+    logger.info("Mapping overridden for %s: subject=%s entities=%s", session_id, m["subject"], m["entities"])
+    return _mapping_payload(session)
 
 
 @app.get("/export/{session_id}")
-def export(session_id: str):
-    session = _require_session(session_id)
+def export(session_id: str, user: dict | None = Depends(current_user)):
+    session = _require_session(session_id, user)
     buffer = io.BytesIO()
     session.current_df.to_excel(buffer, index=False)
     buffer.seek(0)
@@ -252,6 +334,7 @@ def get_data(
     rows: str | None = Query(None, description="Comma-separated dataframe indices to show (used when jumping to an issue)."),
     sort_by: str | None = None,
     sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
+    user: dict | None = Depends(current_user),
 ):
     """A window onto the current version of the table.
 
@@ -260,7 +343,7 @@ def get_data(
     IDE rather than a viewer - a problem is a thing you click to land on,
     the same way you'd click a compiler error and land on the line.
     """
-    session = _require_session(session_id)
+    session = _require_session(session_id, user)
     df = session.current_df
     total_rows = len(df)
 
@@ -325,6 +408,7 @@ def get_issues(
     session_id: str,
     scope: str | None = Query(None, description="Column or advertiser name to scope the check to."),
     limit: int = Query(200, ge=1, le=1000),
+    user: dict | None = Depends(current_user),
 ):
     """Structured issue list for the Problems panel.
 
@@ -336,10 +420,12 @@ def get_issues(
     untruncated means the panel and the agent can't disagree about how
     many rows an issue actually covers.
     """
-    session = _require_session(session_id)
+    session = _require_session(session_id, user)
     df = session.current_df
 
-    issues = run_scoped_diagnostics(df, scope) if scope else run_full_diagnostics(df)
+    mapping = _mapping(session)
+    issues = (run_scoped_diagnostics(df, scope, mapping=mapping) if scope
+              else run_full_diagnostics(df, mapping=mapping))
 
     counts: dict[str, int] = {}
     for i in issues:
@@ -365,8 +451,8 @@ def get_issues(
 
 
 @app.get("/graph/{session_id}/stats", response_model=GraphStats)
-def graph_stats(session_id: str):
-    session = _require_session(session_id)
+def graph_stats(session_id: str, user: dict | None = Depends(current_user)):
+    session = _require_session(session_id, user)
     g = get_graph(session_id, _current_version(session), session.current_df)
 
     nodes_by_type: dict[str, int] = {}
@@ -397,8 +483,8 @@ def graph_stats(session_id: str):
 
 
 @app.get("/graph/{session_id}/search")
-def graph_search(session_id: str, q: str, limit: int = Query(20, ge=1, le=100)):
-    session = _require_session(session_id)
+def graph_search(session_id: str, q: str, limit: int = Query(20, ge=1, le=100), user: dict | None = Depends(current_user)):
+    session = _require_session(session_id, user)
     g = get_graph(session_id, _current_version(session), session.current_df)
     needle = q.strip().lower()
     hits = []
@@ -425,6 +511,7 @@ def graph_neighborhood(
     node: str = Query(..., description="Node id, e.g. 'Advertiser::Sakal Media Group'."),
     depth: int = Query(1, ge=1, le=3),
     max_nodes: int = Query(60, ge=5, le=200),
+    user: dict | None = Depends(current_user),
 ):
     """The subgraph around one node, collapsed for display.
 
@@ -441,7 +528,7 @@ def graph_neighborhood(
        diagram stops communicating anything, so the cap is enforced here
        rather than shipping a graph the browser has to discard.
     """
-    session = _require_session(session_id)
+    session = _require_session(session_id, user)
     g = get_graph(session_id, _current_version(session), session.current_df)
 
     if node not in g:
@@ -497,14 +584,14 @@ def graph_neighborhood(
 
 
 @app.get("/diff/{session_id}/{version}", response_model=DiffResponse)
-def get_diff(session_id: str, version: int):
+def get_diff(session_id: str, version: int, user: dict | None = Depends(current_user)):
     """Every cell changed by the edit that produced `version`.
 
     Version 0 is the original upload, so it has no predecessor to diff
     against and returns an empty change set rather than an error - the UI
     can ask for the diff of whatever version it's on without special-casing.
     """
-    session = _require_session(session_id)
+    session = _require_session(session_id, user)
     if version < 0 or version >= len(session.versions):
         raise HTTPException(
             status_code=400,
@@ -527,8 +614,8 @@ def get_diff(session_id: str, version: int):
 # --------------------------------------------------------------------------
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
-    session = _require_session(request.session_id)
+def chat(request: ChatRequest, user: dict | None = Depends(current_user)):
+    session = _require_session(request.session_id, user)
 
     if not settings.openrouter_api_key:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY is not configured on the server.")
@@ -539,6 +626,7 @@ def chat(request: ChatRequest):
     try:
         result = run_agent_turn(
             session=session,
+            user_id=user["id"] if user else None,
             user_message=request.message,
             model=settings.openrouter_model,
             api_key=settings.openrouter_api_key,
@@ -573,8 +661,8 @@ def chat(request: ChatRequest):
 
 
 @app.get("/history/{session_id}", response_model=HistoryResponse)
-def history(session_id: str):
-    session = _require_session(session_id)
+def history(session_id: str, user: dict | None = Depends(current_user)):
+    session = _require_session(session_id, user)
     return HistoryResponse(
         current_version=_current_version(session),
         total_versions=len(session.versions),
@@ -583,7 +671,7 @@ def history(session_id: str):
                 version=e.version, timestamp=e.timestamp, operation=e.operation,
                 scope=e.scope, rows_affected=e.rows_affected, reason=e.reason,
                 diff_preview=[{k: _json_safe(v) for k, v in d.items()} for d in e.diff_preview],
-                excel=e.excel,
+                excel=e.excel, user_id=e.user_id,
             )
             for e in session.audit_log
         ],
@@ -591,7 +679,7 @@ def history(session_id: str):
 
 
 @app.post("/revert", response_model=RevertResponse)
-def revert(request: RevertRequest):
+def revert(request: RevertRequest, user: dict | None = Depends(current_user)):
     """Makes an earlier version current again, as a new version.
 
     Nothing after `to_version` is deleted - restoring v1 from v3 produces
@@ -600,7 +688,7 @@ def revert(request: RevertRequest):
     edits trustworthy, so undoing an edit must not erase that record.
     Because version numbers only ever grow, cached graphs stay valid.
     """
-    session = _require_session(request.session_id)
+    session = _require_session(request.session_id, user)
     current = _current_version(session)
     if request.to_version < 0 or request.to_version >= current:
         detail = (f"v{request.to_version} is already the current version."
@@ -617,6 +705,7 @@ def revert(request: RevertRequest):
         entry = session_store.restore(
             request.session_id, request.to_version,
             rows_affected=delta["changed_row_count"], diff_preview=preview,
+            user_id=user["id"] if user else None,
         )
     except (ValueError, VersionConflictError) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e

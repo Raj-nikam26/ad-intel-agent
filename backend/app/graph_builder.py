@@ -1,34 +1,27 @@
 """
 graph_builder.py
------------------
-Builds a property graph from the ad-tracking table using networkx.
+----------------
+Builds the knowledge graph from whatever columns the uploaded file has.
 
-A note on "GraphRAG" here, worth being precise about (this is exactly
-the kind of thing to be able to explain rather than gloss over):
-Microsoft's original GraphRAG technique is built for UNSTRUCTURED text
-corpora - it uses an LLM to extract entities/relationships out of raw
-documents, then clusters them into communities, then summarizes those
-communities for retrieval. That extraction step exists to turn
-unstructured text INTO a graph.
+Shape: one subject per row linked to that row's attribute values.
 
-This dataset is already structured - Advertiser, Publication, Category,
-Location, Sales Office, and Edition are already explicit columns, not
-buried in prose. Running an LLM to "extract" entities that are already
-column values would be slower, more expensive, and less reliable than
-just reading them directly. So this builds the graph deterministically
-from the columns, and reserves the LLM for what it's actually needed
-for: turning a natural-language question into a graph query, and
-turning retrieved graph facts back into a natural-language answer.
-That's the same "retrieval over a graph, grounded generation on top"
-principle GraphRAG is built on - adapted to skip the unstructured-text
-extraction step this data doesn't need.
+    (Subject)-[:RELATION {row, column}]->(Attribute)
 
-Entity identity choice: advertiser nodes are keyed on "Advertiser Name
-by AI" (the existing AI-normalized name already present in the source
-data) rather than the raw "AdvertiserName" column, since the raw column
-has ~900 rows where near-identical or legal-entity-suffix variants of
-the same advertiser would otherwise appear as separate nodes. The raw
-name is kept as a node attribute for traceability, not discarded.
+For the ad dataset that comes out as Advertiser -[RAN_AD]-> Publication,
+-[LOCATED_IN]-> Location and so on, because the column roles are inferred
+(see schema_profile.py) rather than hardcoded. For a support-ticket or
+sales file it produces the equivalent links for those columns, with no
+code change.
+
+Node ids are namespaced by entity type - "Advertiser::Pune" and
+"Location::Pune" must stay separate nodes. Without that, a name that
+also appears as a city silently merges the two and every traversal
+through either returns the union. That was a real bug found on the
+sample file, and it is general: any file with repeated values across
+columns hits it.
+
+Rows missing the subject value are skipped: an edge needs something to
+attach to. They stay in the dataframe and in the grid.
 """
 
 from __future__ import annotations
@@ -38,164 +31,138 @@ import logging
 import networkx as nx
 import pandas as pd
 
-logger = logging.getLogger("ad_intel.graph_builder")
+from app.schema_profile import infer_mapping, relation_name, type_name
 
-ADVERTISER_KEY_COLUMN = "Advertiser Name by AI"
+logger = logging.getLogger("ad_intel.graph")
 
 
-def _node_id(entity_type: str, value: str) -> str:
-    """Namespaces node IDs by entity type. Without this, an advertiser
-    name that happens to match a location or category string (plausible
-    with thousands of free-text values) would silently collide into the
-    same graph node - a real bug caught by testing against the actual
-    11k-row file, not a hypothetical edge case."""
+def _blank(value) -> bool:
+    return value is None or pd.isna(value) or str(value).strip() == ""
+
+
+def _node_id(entity_type: str, value) -> str:
+    """Namespaces node IDs by entity type, so identical values in
+    different columns never collapse into one node."""
     return f"{entity_type}::{value}"
 
 
-def build_graph(df: pd.DataFrame) -> nx.MultiDiGraph:
-    """
-    Builds a directed multigraph:
-      Advertiser --[RAN_AD]--> Publication   (edge carries date, page,
-                                               category, sub_category,
-                                               edition, size, reach,
-                                               is_house_ad, row_index)
-      Advertiser --[LOCATED_IN]--> Location
-      Advertiser --[SERVICED_BY]--> SalesOffice
-      Publication --[HAS_CATEGORY]--> Category --[HAS_SUBCATEGORY]--> SubCategory
-
-    Rows with a missing advertiser key are skipped for graph purposes
-    (they still exist in the underlying dataframe - graph construction
-    doesn't touch or drop source data, it just can't place an edge with
-    no identity to attach it to).
-    """
+def build_graph(df: pd.DataFrame, mapping: dict | None = None) -> nx.MultiDiGraph:
+    mapping = mapping or infer_mapping(df)
+    subject_col = mapping.get("subject")
     g = nx.MultiDiGraph()
+    g.graph["mapping"] = mapping
+    if not subject_col or subject_col not in df.columns:
+        logger.warning("No subject column identified; graph is empty")
+        return g
+
+    subject_type = type_name(subject_col)
+    entity_cols = [c for c in mapping.get("entities", []) if c in df.columns]
+    flag_cols = [c for c in mapping.get("flags", {}) if c in df.columns]
+    measure_cols = [c for c in mapping.get("measures", []) if c in df.columns]
+    date_cols = [c for c in mapping.get("dates", []) if c in df.columns]
     skipped = 0
 
     for idx, row in df.iterrows():
-        advertiser = row.get(ADVERTISER_KEY_COLUMN)
-        publication = row.get("Publication")
-
-        if pd.isna(advertiser) or pd.isna(publication):
+        subject_value = row[subject_col]
+        if _blank(subject_value):
             skipped += 1
             continue
 
-        adv_id = _node_id("Advertiser", advertiser)
-        pub_id = _node_id("Publication", publication)
+        sid = _node_id(subject_type, subject_value)
+        if not g.has_node(sid):
+            g.add_node(sid, type=subject_type, name=subject_value, column=subject_col)
+        node = g.nodes[sid]
+        # setdefault, not assignment: this value may already exist as a node
+        # because it appeared in an attribute column first.
+        node.setdefault("rows", set())
+        node.setdefault("flags", {})
+        node["rows"].add(int(idx))
+        for flag in flag_cols:
+            if not _blank(row[flag]):
+                node["flags"][flag] = node["flags"].get(flag, 0) + 1
 
-        if not g.has_node(adv_id):
-            g.add_node(adv_id, type="Advertiser", name=advertiser, raw_names=set())
-        g.nodes[adv_id]["raw_names"].add(str(row.get("AdvertiserName", "")))
+        for col in entity_cols:
+            value = row[col]
+            if _blank(value):
+                continue
+            etype = type_name(col)
+            tid = _node_id(etype, value)
+            if not g.has_node(tid):
+                g.add_node(tid, type=etype, name=value, column=col)
+            g.add_edge(sid, tid, key=f"{col}_{idx}", relation=relation_name(col),
+                       column=col, row_index=int(idx),
+                       **{c: row[c] for c in measure_cols + date_cols})
 
-        if not g.has_node(pub_id):
-            g.add_node(pub_id, type="Publication", name=publication)
-
-        category = row.get("Category")
-        sub_category = row.get("Sub Category")
-        location = row.get("AdvertiserLocation")
-        sales_office = row.get("AdvertiserSalesOffice")
-
-        g.add_edge(
-            adv_id, pub_id,
-            key=f"ad_{idx}",
-            relation="RAN_AD",
-            row_index=int(idx),
-            date=str(row.get("Date")),
-            page=row.get("Page"),
-            category=category if pd.notna(category) else None,
-            sub_category=sub_category if pd.notna(sub_category) else None,
-            edition=row.get("Edition"),
-            width=row.get("Width (cm)"),
-            height=row.get("Height (cm)"),
-            area=row.get("Area (sq cm)"),
-            reach=row.get("Advertiser Reach"),
-            is_house_ad=str(row.get("IsHouseAd")) == "Yes",
-        )
-
-        if pd.notna(location):
-            loc_id = _node_id("Location", location)
-            if not g.has_node(loc_id):
-                g.add_node(loc_id, type="Location", name=location)
-            g.add_edge(adv_id, loc_id, relation="LOCATED_IN")
-
-        if pd.notna(sales_office):
-            office_id = _node_id("SalesOffice", sales_office)
-            if not g.has_node(office_id):
-                g.add_node(office_id, type="SalesOffice", name=sales_office)
-            g.add_edge(adv_id, office_id, relation="SERVICED_BY")
-
-        if pd.notna(category):
-            cat_id = _node_id("Category", category)
-            if not g.has_node(cat_id):
-                g.add_node(cat_id, type="Category", name=category)
-            g.add_edge(pub_id, cat_id, relation="HAS_CATEGORY")
-            if pd.notna(sub_category):
-                subcat_id = _node_id("SubCategory", sub_category)
-                if not g.has_node(subcat_id):
-                    g.add_node(subcat_id, type="SubCategory", name=sub_category)
-                g.add_edge(cat_id, subcat_id, relation="HAS_SUBCATEGORY")
-
-    logger.info(
-        "Graph built: %s nodes, %s edges (%s rows skipped for missing advertiser/publication)",
-        g.number_of_nodes(), g.number_of_edges(), skipped,
-    )
+    logger.info("Graph built: %s nodes, %s edges (%s rows skipped, no %s)",
+                g.number_of_nodes(), g.number_of_edges(), skipped, subject_col)
     return g
 
 
-def advertiser_summary(g: nx.MultiDiGraph, advertiser: str) -> dict | None:
-    """Pulls together everything the graph knows about one advertiser -
-    the kind of multi-hop fact-gathering a flat filter can't do in one
-    step, which is what makes this a genuine graph-retrieval case."""
-    adv_id = _node_id("Advertiser", advertiser)
-    if adv_id not in g:
+# ------------------------------------------------------------------ retrieval
+
+def entity_summary(g: nx.MultiDiGraph, value: str) -> dict | None:
+    """Everything the graph knows about one subject: how many rows it
+    covers, and its distinct values in each linked column."""
+    mapping = g.graph.get("mapping", {})
+    subject_col = mapping.get("subject")
+    sid = _node_id(type_name(subject_col), value) if subject_col else None
+    if not sid or sid not in g:
         return None
 
-    publications = set()
-    categories = set()
-    editions = set()
-    total_ads = 0
-    house_ads = 0
-
-    for _, target, data in g.out_edges(adv_id, data=True):
-        if data.get("relation") == "RAN_AD":
-            publications.add(g.nodes[target]["name"])
-            total_ads += 1
-            if data.get("is_house_ad"):
-                house_ads += 1
-            if data.get("category"):
-                categories.add(data["category"])
-            if data.get("edition"):
-                editions.add(data["edition"])
-
-    locations = list({g.nodes[t]["name"] for _, t, d in g.out_edges(adv_id, data=True) if d.get("relation") == "LOCATED_IN"})
-    sales_offices = list({g.nodes[t]["name"] for _, t, d in g.out_edges(adv_id, data=True) if d.get("relation") == "SERVICED_BY"})
+    node = g.nodes[sid]
+    linked: dict[str, list] = {}
+    for _, target, data in g.out_edges(sid, data=True):
+        linked.setdefault(data["column"], set()).add(g.nodes[target]["name"])
 
     return {
+        "subject": value,
+        "subject_column": subject_col,
+        "row_count": len(node.get("rows", ())),
+        "flags": dict(node.get("flags", {})),
+        "linked": {col: sorted(map(str, vals)) for col, vals in linked.items()},
+    }
+
+
+def find_by_attributes(g: nx.MultiDiGraph, criteria: dict[str, str]) -> list[str]:
+    """Subjects linked to every given column/value pair.
+
+    The values may come from different rows of the same subject - an
+    advertiser handled by one office that also ran a category of ad
+    somewhere else still counts. That is the multi-hop join a flat filter
+    on a single row cannot express.
+    """
+    matched: list[set[str]] = []
+    for column, value in criteria.items():
+        tid = _node_id(type_name(column), value)
+        if tid not in g:
+            return []
+        matched.append({src for src, _, _ in g.in_edges(tid, data=True)})
+    if not matched:
+        return []
+    return sorted(g.nodes[n]["name"] for n in set.intersection(*matched))
+
+
+# --------------------------------------------- ad-dataset convenience wrappers
+
+def advertiser_summary(g: nx.MultiDiGraph, advertiser: str) -> dict | None:
+    """The ad-dataset view of entity_summary, kept because the sample file
+    and its tests speak in these terms."""
+    base = entity_summary(g, advertiser)
+    if base is None:
+        return None
+    linked = base["linked"]
+    return {
         "advertiser": advertiser,
-        "raw_name_variants": list(g.nodes[adv_id].get("raw_names", [])),
-        "total_ad_insertions": total_ads,
-        "house_ads": house_ads,
-        "publications": list(publications),
-        "categories": list(categories),
-        "editions": list(editions),
-        "locations": locations,
-        "sales_offices": sales_offices,
+        "raw_name_variants": linked.get("AdvertiserName", []),
+        "total_ad_insertions": base["row_count"],
+        "house_ads": base["flags"].get("IsHouseAd", 0),
+        "publications": linked.get("Publication", []),
+        "categories": linked.get("Category", []),
+        "editions": linked.get("Edition", []),
+        "locations": linked.get("AdvertiserLocation", []),
+        "sales_offices": linked.get("AdvertiserSalesOffice", []),
     }
 
 
 def advertisers_by_category_and_office(g: nx.MultiDiGraph, category: str, sales_office: str) -> list[str]:
-    """Example multi-hop traversal: advertisers serviced by a given
-    sales office that also ran ads in a given category - requires
-    joining two different edge types, exactly the kind of query a flat
-    single-table filter handles awkwardly but a graph handles directly."""
-    result = set()
-    office_id = _node_id("SalesOffice", sales_office)
-    for node_id, attrs in g.nodes(data=True):
-        if attrs.get("type") != "Advertiser":
-            continue
-        offices = {t for _, t, d in g.out_edges(node_id, data=True) if d.get("relation") == "SERVICED_BY"}
-        if office_id not in offices:
-            continue
-        categories = {d.get("category") for _, _, d in g.out_edges(node_id, data=True) if d.get("relation") == "RAN_AD"}
-        if category in categories:
-            result.add(attrs["name"])
-    return list(result)
+    return find_by_attributes(g, {"Category": category, "AdvertiserSalesOffice": sales_office})

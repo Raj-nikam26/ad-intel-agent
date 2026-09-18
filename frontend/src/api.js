@@ -2,8 +2,18 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 export { API_BASE }
 
+// Set by the Clerk wrapper when sign-in is on; returns a fresh session token.
+let tokenGetter = null
+export function setTokenGetter(fn) { tokenGetter = fn }
+
+async function authHeaders() {
+  const token = tokenGetter ? await tokenGetter() : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function req(path, options) {
-  const res = await fetch(`${API_BASE}${path}`, options)
+  const headers = { ...(options?.headers || {}), ...(await authHeaders()) }
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
   if (!res.ok) {
     let detail
     try {
@@ -29,6 +39,7 @@ const qs = (params) => {
 export const api = {
   health: () => req('/health'),
 
+
   upload(file) {
     const body = new FormData()
     body.append('file', file)
@@ -38,6 +49,16 @@ export const api = {
   sample: () => req('/sample', { method: 'POST' }),
 
   session: (sessionId) => req(`/session/${sessionId}`),
+
+  mapping: (sessionId) => req(`/mapping/${sessionId}`),
+
+  setMapping(sessionId, body) {
+    return req(`/mapping/${sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  },
 
   data(sessionId, params = {}) {
     return req(`/data/${sessionId}${qs(params)}`)
@@ -83,7 +104,16 @@ export const api = {
     })
   },
 
-  exportUrl(sessionId) {
-    return `${API_BASE}/export/${sessionId}`
+  // A plain link cannot carry the Authorization header, so the file is
+  // fetched and handed to the browser as a download.
+  async exportFile(sessionId, filename) {
+    const res = await fetch(`${API_BASE}/export/${sessionId}`, { headers: await authHeaders() })
+    if (!res.ok) throw new Error(`Export failed (${res.status})`)
+    const url = URL.createObjectURL(await res.blob())
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename })
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   },
 }

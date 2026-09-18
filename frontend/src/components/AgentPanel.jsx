@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Bot, X, Send, Sparkles } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 
 const TOOL_LABEL = {
   detect_issues:                          'Scanned for issues',
@@ -85,7 +86,9 @@ export default function AgentPanel({
                 {m.role === 'user' ? 'You' : 'AI Assistant'}
               </div>
             )}
-            <div className="msg-text">{m.text}</div>
+            <div className="msg-text">
+              {m.role === 'assistant' ? <ReactMarkdown>{m.text}</ReactMarkdown> : m.text}
+            </div>
 
             {m.toolCalls?.length > 0 && (
               <div className="tool-trace">

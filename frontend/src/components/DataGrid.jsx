@@ -17,6 +17,7 @@ export default function DataGrid({
   onStatsChange, onCellFocus,
 }) {
   const scrollRef = useRef(null)
+  const headerRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportH, setViewportH] = useState(600)
   const [columns, setColumns] = useState([])
@@ -169,7 +170,7 @@ export default function DataGrid({
   return (
     <div className="grid-wrap">
       {/* Column headers */}
-      <div className="grid-header">
+      <div className="grid-header" ref={headerRef}>
         {/* Corner cell */}
         <div
           className="grid-cell grid-head-cell rownum"
@@ -184,7 +185,12 @@ export default function DataGrid({
       <div
         className="grid-body"
         ref={scrollRef}
-        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        onScroll={(e) => {
+          setScrollTop(e.currentTarget.scrollTop)
+          // Keep the header aligned with the cells: it is a separate
+          // element, so it does not scroll sideways on its own.
+          if (headerRef.current) headerRef.current.scrollLeft = e.currentTarget.scrollLeft
+        }}
       >
         <div className="grid-spacer" style={{ height: filteredRows * ROW_H }}>
           {visible.map((i) => {

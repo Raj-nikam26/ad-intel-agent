@@ -1,0 +1,47 @@
+# Infrastructure for the production setup.
+# Run:  docker compose up -d
+# Version snapshots use local disk in development; in production point
+# S3_* settings at AWS S3 or Cloudflare R2.
+# Then start the backend, the graph worker and the frontend (see RUN.md).
+
+services:
+  postgres:
+    restart: unless-stopped
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: adintel
+      POSTGRES_PASSWORD: adintel
+      POSTGRES_DB: adintel
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adintel"]
+      interval: 5s
+      retries: 20
+
+  neo4j:
+    restart: unless-stopped
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/adintel-graph
+    ports: ["7474:7474", "7687:7687"]
+    volumes: [neo4jdata:/data]
+
+  # Web viewer for PostgreSQL: http://localhost:8080
+  adminer:
+    restart: unless-stopped
+    image: adminer:latest
+    ports: ["8080:8080"]
+    depends_on: [postgres]
+
+  redis:
+    restart: unless-stopped
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+
+
+volumes:
+  pgdata:
+  neo4jdata:
+  redisdata:

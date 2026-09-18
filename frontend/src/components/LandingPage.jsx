@@ -1,412 +1,216 @@
 import { useRef, useState } from 'react'
 import {
-  FileSpreadsheet, Zap, Shield, BarChart3, Sparkles,
-  Upload, Check, Bot, Database, TrendingUp, ArrowRight,
-  Play, Star
+  FileSpreadsheet, UploadCloud, SearchCheck, Network, History, FunctionSquare, ArrowRight, Sparkles,
 } from 'lucide-react'
 
 const FEATURES = [
   {
-    icon: Bot,
-    title: 'Conversational AI',
-    desc: 'Ask questions in plain English. Get instant answers about your data, relationships, and trends.',
-    iconBg: 'var(--indigo-50)',
-    iconColor: 'var(--indigo-600)',
+    icon: SearchCheck,
+    title: 'Problems found for you',
+    text: 'Blank cells, columns that disagree and near-duplicate names, listed with the exact rows.',
   },
   {
-    icon: FileSpreadsheet,
-    title: 'Excel-native Interface',
-    desc: 'Familiar spreadsheet UI with column letters, row numbers, sorting and filtering — just like Excel.',
-    iconBg: 'var(--green-50)',
-    iconColor: 'var(--green-600)',
+    icon: Network,
+    title: 'Questions across columns',
+    text: 'Ask how customers, offices or categories connect. Answers come from a graph of your own data.',
   },
   {
-    icon: Shield,
-    title: 'Full Audit Trail',
-    desc: 'Every AI change is tracked with a version history. Roll back anytime, compare diffs at a glance.',
-    iconBg: 'var(--amber-50)',
-    iconColor: 'var(--amber-500)',
+    icon: History,
+    title: 'Every change reversible',
+    text: 'Edits happen only when you ask, show the cells they touched, and can be restored any time.',
   },
   {
-    icon: BarChart3,
-    title: 'Knowledge Graph',
-    desc: 'Visualise relationships between entities as an interactive network — advertisers, categories, offices.',
-    iconBg: '#fdf4ff',
-    iconColor: '#9333ea',
-  },
-  {
-    icon: Database,
-    title: 'Privacy First',
-    desc: 'Your files never leave your machine. Zero third-party data sharing. Enterprise-grade privacy by design.',
-    iconBg: 'var(--blue-50)',
-    iconColor: 'var(--blue-500)',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Smart Diagnostics',
-    desc: 'Auto-detect missing values, name mismatches, and anomalies. Fix issues with one-click AI suggestions.',
-    iconBg: 'var(--green-50)',
-    iconColor: 'var(--green-600)',
+    icon: FunctionSquare,
+    title: 'Repeat it in Excel',
+    text: 'Each answer and fix comes with the formula or steps to do the same in your own file.',
   },
 ]
 
-// Fake spreadsheet data for hero visual
-const PREVIEW_ROWS = [
-  { num: '1', advertiser: 'Sakal Media Group', category: 'News', status: 'ok' },
-  { num: '2', advertiser: 'Pune Motors Ltd', category: 'Auto', status: 'normal' },
-  { num: '3', advertiser: 'FinEdge Banking', category: 'Finance', status: 'changed' },
-  { num: '4', advertiser: 'TechWorld Corp', category: 'Technology', status: 'normal' },
-  { num: '5', advertiser: 'BlueChip Retail', category: 'Retail', status: 'ok' },
+const STEPS = [
+  ['Open a file', 'Any .xlsx or .xls, read exactly as it is.'],
+  ['Review what was found', 'Problems and column roles, worked out for you.'],
+  ['Fix what you choose', 'Each fix is a new version you can undo.'],
 ]
 
-export default function LandingPage({ onUpload, onSample, uploading, error }) {
-  const fileRef = useRef(null)
-  const [dragging, setDragging] = useState(false)
-
-  function handleDrop(e) {
-    e.preventDefault()
-    setDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file) onUpload({ target: { files: [file] } })
-  }
-
+/** A small, static picture of the workspace - what the product looks like. */
+function ProductPreview() {
+  const rows = [
+    ['Sakal Media Group', 'Finance', 'Pune'],
+    ['Parle Products', 'Fmcg', 'Mumbai'],
+    ['Lokmat Group', null, 'Nagpur'],
+    ['Tata Motors', 'Auto', 'Pune'],
+    ['Bajaj Finserv', 'Finance', null],
+  ]
   return (
-    <div className="landing">
-      {/* ── Nav ── */}
-      <nav className="landing-nav">
-        <div className="nav-inner">
-          <div className="nav-logo">
-            <div className="logo-icon-wrap">
-              <FileSpreadsheet size={18} />
-            </div>
-            <span className="logo-text">ExcelAI</span>
-          </div>
-
-          <div className="nav-links">
-            <a href="#features">Features</a>
-            <a href="#how-it-works">How it works</a>
-            <a href="#upload">Get started</a>
-          </div>
-
-          <div className="nav-actions">
-            <button className="nav-btn-ghost">Sign in</button>
-            <label className="nav-btn-primary" htmlFor="nav-upload-file">
-              <Upload size={14} />
-              Open Spreadsheet
-              <input
-                id="nav-upload-file"
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={onUpload}
-                disabled={uploading}
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── Hero ── */}
-      <section className="hero">
-        <div className="landing-hero-bg">
-          <div className="hero-mesh" />
-          <div className="hero-grid" />
-        </div>
-
-        <div className="hero-inner">
-          {/* Left copy */}
-          <div className="hero-content">
-            <div className="hero-badge">
-              <div className="hero-badge-dot">
-                <Sparkles size={10} />
-              </div>
-              AI-Powered Spreadsheet Intelligence
-            </div>
-
-            <h1 className="hero-title">
-              Check, query and fix{' '}
-              <span className="hero-title-em">your ad data.</span>
-            </h1>
-
-            <p className="hero-sub">
-              Open a spreadsheet, ask what is wrong with it, and approve fixes one at a time.
-              Every change is saved as a version you can restore, with the Excel formula to repeat it yourself.
-            </p>
-
-            <div className="hero-actions">
-              <label className="btn-primary-lg" htmlFor="hero-upload-file">
-                {uploading ? (
-                  <>
-                    <span className="spinner" />
-                    Loading…
-                  </>
-                ) : (
-                  <>
-                    <Upload size={17} />
-                    Open a Spreadsheet
-                  </>
-                )}
-                <input
-                  id="hero-upload-file"
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={onUpload}
-                  disabled={uploading}
-                  style={{ display: 'none' }}
-                />
-              </label>
-
-              <button className="btn-secondary-lg" onClick={onSample} disabled={uploading}>
-                <Play size={15} />
-                Try the sample file
-              </button>
-            </div>
-
-            <div className="hero-social-proof">
-              <span className="proof-text">
-                Sample: 11,275 newspaper ad insertions across 16 columns
-              </span>
-            </div>
-            {error && <div className="hero-error">{error}</div>}
-
-            {error && (
-              <div className="upload-error" style={{ marginTop: 16 }}>
-                ⚠ {error}
-              </div>
-            )}
-          </div>
-
-          {/* Right visual */}
-          <div className="hero-visual">
-            <div className="hero-spreadsheet-card">
-              {/* Fake titlebar */}
-              <div className="hsc-titlebar">
-                <div className="mac-dots">
-                  <span className="mac-dot r" />
-                  <span className="mac-dot y" />
-                  <span className="mac-dot g" />
-                </div>
-                <span className="hsc-filename">AdIntelligence_Q3.xlsx</span>
-                <span className="hsc-logo">
-                  <FileSpreadsheet size={13} />
-                  ExcelAI
-                </span>
-              </div>
-
-              {/* Fake spreadsheet grid */}
-              <div className="hsc-body">
-                <div className="hsc-row header">
-                  <span className="hsc-cell row-num">#</span>
-                  <span className="hsc-cell">A · Advertiser</span>
-                  <span className="hsc-cell">B · Category</span>
-                  <span className="hsc-cell">C · Status</span>
-                </div>
-                {PREVIEW_ROWS.map((r) => (
-                  <div key={r.num} className="hsc-row">
-                    <span className="hsc-cell row-num">{r.num}</span>
-                    <span className={`hsc-cell${r.status === 'ok' ? ' highlight' : ''}`}>
-                      {r.advertiser}
-                    </span>
-                    <span className="hsc-cell">{r.category}</span>
-                    <span className={`hsc-cell${r.status === 'changed' ? ' changed' : ''}`}>
-                      {r.status === 'ok' ? '✓ Active' : r.status === 'changed' ? '⟳ Updated' : '—'}
-                    </span>
-                  </div>
+    <div className="lp-preview" aria-hidden="true">
+      <div className="lp-pv-bar">
+        <span className="lp-pv-dots"><i /><i /><i /></span>
+        <span className="lp-pv-file">Advertisers.xlsx</span>
+        <span className="lp-pv-ver">v2</span>
+      </div>
+      <div className="lp-pv-body">
+        <table className="lp-pv-grid">
+          <thead>
+            <tr><th /><th>A · Advertiser</th><th>B · Category</th><th>C · Office</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="n">{i + 2}</td>
+                {r.map((c, j) => (
+                  <td key={j} className={c === null ? 'gap' : undefined}>
+                    {c ?? '∅'}
+                  </td>
                 ))}
-              </div>
-            </div>
-
-            {/* Floating AI badge */}
-            <div className="hsc-ai-badge">
-              <div className="ai-badge-icon">
-                <Bot size={18} />
-              </div>
-              <div className="ai-badge-text">
-                <p>AI found 3 issues</p>
-                <span>2 missing categories · 1 duplicate</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Logos bar ── */}
-      <div className="logos-bar">
-        <div className="logos-inner">
-          <span className="logos-label">Trusted by teams at</span>
-          <div className="logos-list">
-            {['Sakal Media', 'PuneEdge Corp', 'FinAxis Group', 'NextGen Analytics', 'DataBridge Inc'].map((l) => (
-              <span key={l} className="logo-badge">{l}</span>
+              </tr>
             ))}
+          </tbody>
+        </table>
+        <div className="lp-pv-chat">
+          <div className="lp-pv-msg me">What's missing in Category?</div>
+          <div className="lp-pv-msg bot">
+            <Sparkles size={12} /> 1 row has no Category — row 4. Want me to fill it?
           </div>
+          <div className="lp-pv-fx"><span>fx</span> =SUMPRODUCT(--(TRIM(B2:B6)=""))</div>
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* ── Features ── */}
-      <section className="section" id="features">
-        <div className="section-inner">
-          <div className="section-header">
-            <div className="eyebrow">
-              <Zap size={13} />
-              Features
-            </div>
-            <h2 className="section-title">Everything you need to master your data</h2>
-            <p className="section-sub">
-              Built for analysts, operations teams, and data-driven businesses.
-              No training required — if you can use Excel, you can use ExcelAI.
-            </p>
+/**
+ * Entry screen.
+ *
+ * Signed out: a public page - what the product does, with Sign in and Get
+ * started. Opening a file asks the visitor to sign in first.
+ * Signed in: the same page with a working upload area and the account.
+ */
+export default function LandingPage({
+  onUpload, onSample, uploading, error, account, onSignIn, onSignUp,
+}) {
+  const inputRef = useRef(null)
+  const [dragging, setDragging] = useState(false)
+  const signedIn = !!account || !onSignIn
+
+  const pick = (file) => file && onUpload({ target: { files: [file] } })
+  const needSignIn = () => onSignIn?.()
+
+  return (
+    <div className="lp">
+      <header className="lp-nav">
+        <div className="lp-brand">
+          <span className="lp-logo"><FileSpreadsheet size={16} /></span>
+          ExcelAI
+        </div>
+        <nav className="lp-links">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+        </nav>
+        {account ? (
+          <div className="lp-account">
+            <span className="lp-account-text">
+              <span className="lp-account-label">Signed in as</span>
+              <span className="lp-account-name">{account.name}</span>
+            </span>
+            {account.button}
           </div>
+        ) : onSignIn ? (
+          <div className="lp-auth">
+            <button className="lp-link-btn" onClick={onSignIn}>Sign in</button>
+            <button className="lp-btn lp-btn-primary lp-btn-sm" onClick={onSignUp || onSignIn}>
+              Get started
+            </button>
+          </div>
+        ) : <span />}
+      </header>
 
-          <div className="features-grid">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="feature-card">
-                <div
-                  className="feature-icon"
-                  style={{ '--icon-bg': f.iconBg, '--icon-color': f.iconColor, background: f.iconBg, color: f.iconColor }}
-                >
-                  <f.icon size={22} />
+      <section className="lp-hero">
+        <div className="lp-hero-inner">
+          <div className="lp-copy">
+            <p className="lp-kicker"><Sparkles size={13} /> Spreadsheet checks with an assistant</p>
+            <h1>
+              Find what's wrong with your spreadsheet.
+              <span> Fix only what you approve.</span>
+            </h1>
+            <p className="lp-sub">
+              Open any Excel file to see its problems, ask how its data connects,
+              and make changes you can always undo.
+            </p>
+
+            {signedIn ? (
+              <div
+                className={`lp-drop${dragging ? ' is-dragging' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files[0]) }}
+              >
+                <UploadCloud size={22} className="lp-drop-icon" />
+                <div className="lp-drop-text">
+                  <strong>{uploading ? 'Opening your file…' : 'Drop an Excel file here'}</strong>
+                  <span>.xlsx or .xls, up to 25 MB</span>
                 </div>
-                <h3 className="feature-title">{f.title}</h3>
-                <p className="feature-desc">{f.desc}</p>
+                <button className="lp-btn lp-btn-primary" disabled={uploading}
+                        onClick={() => inputRef.current?.click()}>
+                  Choose file
+                </button>
+                <input ref={inputRef} type="file" accept=".xlsx,.xls" hidden
+                       onChange={onUpload} disabled={uploading} />
+              </div>
+            ) : (
+              <div className="lp-cta">
+                <button className="lp-btn lp-btn-primary lp-btn-lg" onClick={onSignUp || onSignIn}>
+                  Get started — it's free <ArrowRight size={16} />
+                </button>
+                <span className="lp-cta-note">Sign in with Google or email</span>
+              </div>
+            )}
+
+            <button className="lp-sample" disabled={uploading}
+                    onClick={signedIn ? onSample : needSignIn}>
+              or try it with the sample file
+              <span>11,275 newspaper ad insertions</span>
+              <ArrowRight size={14} />
+            </button>
+            {error && <p className="lp-error">{error}</p>}
+          </div>
+
+          <ProductPreview />
+        </div>
+      </section>
+
+      <section className="lp-band" id="features">
+        <div className="lp-wrap">
+          <h2 className="lp-h2">Everything you need to trust a spreadsheet</h2>
+          <div className="lp-features">
+            {FEATURES.map(({ icon: Icon, title, text }) => (
+              <div key={title} className="lp-feature">
+                <span className="lp-feature-icon"><Icon size={18} /></span>
+                <div>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Upload zone ── */}
-      <section className="section upload-section" id="upload">
-        <div className="section-inner">
-          <div className="section-header">
-            <div className="eyebrow">
-              <Upload size={13} />
-              Get Started Free
-            </div>
-            <h2 className="section-title">Drop your spreadsheet and go</h2>
-            <p className="section-sub">No signup. No credit card. Your data stays on your device.</p>
-          </div>
-
-          <div
-            className={`upload-hero-zone${dragging ? ' dragging' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-          >
-            <div className="upload-icon-ring">
-              <FileSpreadsheet size={36} />
-            </div>
-            <h3 className="upload-zone-title">
-              {uploading ? 'Loading your spreadsheet…' : 'Drop your file here'}
-            </h3>
-            <p className="upload-zone-sub">
-              {uploading
-                ? 'Analysing structure and preparing your AI workspace…'
-                : 'Supports .xlsx and .xls files · Up to any size · Your data never leaves this device'}
-            </p>
-
-            <label className="upload-btn-main" htmlFor="zone-upload-file">
-              {uploading ? (
-                <>
-                  <span className="spinner-green" />
-                  Processing…
-                </>
-              ) : (
-                <>
-                  <Upload size={16} />
-                  Select File
-                </>
-              )}
-              <input
-                id="zone-upload-file"
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={onUpload}
-                disabled={uploading}
-                style={{ display: 'none' }}
-              />
-            </label>
-
-            <div className="upload-trust">
-              {['No signup required', 'Files stay on your device', '100% free'].map((t) => (
-                <span key={t} className="trust-pill">
-                  <Check size={12} />
-                  {t}
-                </span>
-              ))}
-            </div>
-
-            {error && <div className="upload-error">{error}</div>}
-          </div>
-        </div>
+      <section className="lp-wrap lp-how" id="how">
+        <h2 className="lp-h2">How it works</h2>
+        <ol className="lp-timeline">
+          {STEPS.map(([title, text], i) => (
+            <li key={title}>
+              <span className="lp-step-n">{i + 1}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </li>
+          ))}
+        </ol>
       </section>
 
-      {/* ── How it works ── */}
-      <section className="section how-section" id="how-it-works">
-        <div className="section-inner">
-          <div className="section-header">
-            <div className="eyebrow">
-              <ArrowRight size={13} />
-              How It Works
-            </div>
-            <h2 className="section-title">From raw file to clean insights in minutes</h2>
-            <p className="section-sub">Three steps. Zero complexity. Maximum impact.</p>
-          </div>
-
-          <div className="steps-grid">
-            {[
-              { n: '1', title: 'Upload your file', desc: 'Drop any .xlsx or .xls spreadsheet. No pre-processing needed — ExcelAI reads your file exactly as-is.' },
-              { n: '2', title: 'Chat with your data', desc: 'Ask questions in plain English. The AI uses tools to query tables, traverse relationships, and detect issues.' },
-              { n: '3', title: 'Export clean data', desc: 'Download your improved dataset with a full changelog and version history — audit-ready from day one.' },
-            ].map((s) => (
-              <div key={s.n} className="step-card">
-                <div className="step-number">{s.n}</div>
-                <h3 className="step-title">{s.title}</h3>
-                <p className="step-desc">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
-      <section className="cta-section">
-        <div className="cta-inner">
-          <h2 className="cta-title">Ready to make your data work smarter?</h2>
-          <p className="cta-sub">
-            Upload a spreadsheet and experience ExcelAI in 30 seconds — no account needed.
-          </p>
-          <label className="cta-btn" htmlFor="cta-upload-file">
-            <FileSpreadsheet size={18} />
-            Get Started Free
-            <input
-              id="cta-upload-file"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={onUpload}
-              disabled={uploading}
-              style={{ display: 'none' }}
-            />
-          </label>
-        </div>
-      </section>
-
-      {/* ── Footer ── */}
-      <footer className="landing-footer">
-        <div className="footer-inner">
-          <div className="footer-logo">
-            <div className="footer-logo-icon">
-              <FileSpreadsheet size={14} />
-            </div>
-            <span className="footer-logo-text">ExcelAI</span>
-          </div>
-          <div className="footer-links">
-            <a href="#">Privacy Policy</a>
-            <a href="#">Terms of Service</a>
-            <a href="#">Documentation</a>
-            <a href="#">Contact</a>
-          </div>
-          <span className="footer-copy">© 2026 ExcelAI. All rights reserved.</span>
-        </div>
+      <footer className="lp-footer">
+        <span>ExcelAI</span>
+        <span>Your original file is never modified.</span>
       </footer>
     </div>
   )

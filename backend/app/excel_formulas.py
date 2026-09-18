@@ -178,45 +178,33 @@ def for_detect_issues(df: pd.DataFrame, arguments: dict, result: dict) -> dict |
     return _wrap(items) if items else None
 
 
-def for_advertiser_summary(df: pd.DataFrame, arguments: dict, result: dict) -> dict | None:
+def for_entity_summary(df: pd.DataFrame, arguments: dict, result: dict) -> dict | None:
+    """Counts and distinct-value lists for one subject, on the user's sheet."""
     if "error" in result:
         return None
-    name = arguments.get("advertiser", "")
-    need = ["Advertiser Name by AI", "Publication"]
-    if any(c not in df.columns for c in need):
+    name = arguments.get("entity", "")
+    subject_col = result.get("subject_column")
+    if not subject_col or subject_col not in df.columns:
         return None
 
-    adv, pub = _rng(df, "Advertiser Name by AI"), _rng(df, "Publication")
-    base = f"EXACT({adv},{_q(name)})*({pub}<>\"\")"
+    subj = _rng(df, subject_col)
+    match = f"EXACT({subj},{_q(name)})"
+    formulas = [_formula(f"Rows for this {subject_col}", f"=SUMPRODUCT(--{match})", result.get("row_count"))]
 
-    def distinct(column: str, label: str, expected: list) -> dict | None:
+    for column, values in (result.get("linked") or {}).items():
         if column not in df.columns:
-            return None
+            continue
         r = _rng(df, column)
-        return _formula(
-            label,
-            f'=UNIQUE(FILTER({r},{base}*({r}<>""),"none"))',
-            f"{len(expected)} value(s)",
-        )
-
-    formulas = [
-        _formula("Total ad insertions", f"=SUMPRODUCT({base})", result.get("total_ad_insertions")),
-    ]
-    if "IsHouseAd" in df.columns:
         formulas.append(_formula(
-            "House ads",
-            f'=SUMPRODUCT({base}*EXACT({_rng(df, "IsHouseAd")},"Yes"))',
-            result.get("house_ads"),
+            f"Distinct {column}",
+            f'=UNIQUE(FILTER({r},{match}*({r}<>""),"none"))',
+            f"{len(values)} value(s)",
         ))
-    for column, label, key in [
-        ("Publication", "Publications used", "publications"),
-        ("Category", "Categories", "categories"),
-        ("AdvertiserLocation", "Locations", "locations"),
-        ("AdvertiserSalesOffice", "Sales offices", "sales_offices"),
-    ]:
-        f = distinct(column, label, result.get(key, []))
-        if f:
-            formulas.append(f)
+
+    for flag, count in (result.get("flags") or {}).items():
+        if flag in df.columns:
+            formulas.append(_formula(f"Rows flagged in {flag}",
+                                     f'=SUMPRODUCT({match}*(TRIM({_rng(df, flag)})<>""))', count))
 
     return _wrap([{
         "title": f"Summary of {name}",
@@ -232,39 +220,54 @@ def for_advertiser_summary(df: pd.DataFrame, arguments: dict, result: dict) -> d
     }])
 
 
-def for_category_and_office(df: pd.DataFrame, arguments: dict, result: dict) -> dict | None:
-    category, office = arguments.get("category", ""), arguments.get("sales_office", "")
-    need = ["Advertiser Name by AI", "Publication", "Category", "AdvertiserSalesOffice"]
-    if any(c not in df.columns for c in need):
+def for_find_by_attributes(df: pd.DataFrame, arguments: dict, result: dict) -> dict | None:
+    """Subjects matching every criterion, where the criteria may be
+    satisfied by different rows of the same subject."""
+    criteria = {k: v for k, v in (arguments.get("criteria") or {}).items() if k in df.columns}
+    if len(criteria) < 1:
+        return None
+    subject_col = None
+    for name, role in (df.attrs.get("roles") or {}).items():
+        if role == "subject":
+            subject_col = name
+    subject_col = subject_col or _first_subject(df)
+    if subject_col is None:
         return None
 
-    adv, pub = _rng(df, "Advertiser Name by AI"), _rng(df, "Publication")
-    cat, off = _rng(df, "Category"), _rng(df, "AdvertiserSalesOffice")
+    subj = _rng(df, subject_col)
+    lists, names = [], []
+    for i, (column, value) in enumerate(criteria.items()):
+        var = f"set{i + 1}"
+        names.append(var)
+        lists.append(f'{var},UNIQUE(FILTER(names,valid*EXACT({_rng(df, column)},{_q(value)}),""))')
 
-    # Two separate lists intersected, not one FILTER with both conditions:
-    # the graph links an advertiser to an office through any of its rows and
-    # to a category through any of its rows, which need not be the same row.
-    formula = (
-        f"=LET(names,{adv},"
-        f"valid,({adv}<>\"\")*({pub}<>\"\"),"
-        f"atOffice,UNIQUE(FILTER(names,valid*EXACT({off},{_q(office)}),\"\")),"
-        f"inCategory,UNIQUE(FILTER(names,valid*EXACT({cat},{_q(category)}),\"\")),"
-        f"FILTER(atOffice,BYROW(atOffice,LAMBDA(n,OR(EXACT(n,inCategory)))),\"none\"))"
-    )
+    keep = names[0]
+    for other in names[1:]:
+        keep = f"FILTER({keep},BYROW({keep},LAMBDA(n,OR(EXACT(n,{other})))),\"none\")"
+
+    formula = (f'=LET(names,{subj},valid,({subj}<>""),' + ",".join(lists) + f",{keep})")
     return _wrap([{
-        "title": f"Advertisers at {office} that ran {category} ads",
-        "formulas": [_formula("Matching advertisers", formula, f"{result.get('count', 0)} advertiser(s)")],
+        "title": "Subjects matching " + " and ".join(f"{c}={v}" for c, v in criteria.items()),
+        "formulas": [_formula("Matching values", formula, f"{result.get('count', 0)} match(es)")],
         "steps": [
             "Paste into an empty cell; the list spills downward.",
             "Wrap it in ROWS( ... ) to get just the count.",
         ],
         "notes": [
-            "An advertiser qualifies if any of its rows is at this office and any of its rows is in this "
-            "category. They do not have to be the same row, which is why the formula builds two lists "
-            "and keeps the names on both.",
+            "Each criterion is matched separately and the lists intersected, because a subject can "
+            "satisfy them on different rows. A single FILTER with both conditions would answer a "
+            "different question.",
             "Needs Excel 365, for LET, BYROW and LAMBDA.",
         ],
     }])
+
+
+def _first_subject(df: pd.DataFrame) -> str | None:
+    from app.schema_profile import infer_mapping
+    try:
+        return infer_mapping(df).get("subject")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def for_tabular_query(df: pd.DataFrame, arguments: dict, result: dict) -> dict | None:
@@ -287,8 +290,8 @@ def for_tabular_query(df: pd.DataFrame, arguments: dict, result: dict) -> dict |
 
 READ_BUILDERS = {
     "detect_issues": for_detect_issues,
-    "get_advertiser_summary": for_advertiser_summary,
-    "find_advertisers_by_category_and_office": for_category_and_office,
+    "get_entity_summary": for_entity_summary,
+    "find_by_attributes": for_find_by_attributes,
     "tabular_query": for_tabular_query,
 }
 

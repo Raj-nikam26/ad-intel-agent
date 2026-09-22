@@ -60,6 +60,7 @@ SYSTEM_PROMPT = """You are an assistant for a spreadsheet the user has uploaded.
 You have tools to: check for data-quality issues (never changes anything), answer relational questions using a knowledge graph built from the file's columns, answer flat filter/aggregate questions on the table, and apply a specific, scoped edit ONLY when the user explicitly asks you to fix, change or update something.
 
 Rules:
+- To create a new column - including a calculated one such as "perimeter from width and height" - call apply_edit with operation add_column and a formula, e.g. 2*([Width]+[Height]). Do not compute it with tabular_query: that only answers, it does not save a column.
 - Never call apply_edit unless the user has explicitly asked for a change   in this message or the immediately preceding one.
 - When calling apply_edit, use row_indices and column values that came from   a prior detect_issues or query result in this conversation - never invent them.
 - Always explain what you found or what you changed in plain language after   a tool call, don't just show raw tool output.
@@ -194,6 +195,7 @@ TOOL_DEFINITIONS = [
                     "new_column": {"type": "string", "description": "Only for add_column: name of the column to create."},
                     "source_column": {"type": "string", "description": "Only for add_column: copy this existing column's values into the new one. Omit for an empty column or a fixed value (use value)."},
                     "after_column": {"type": "string", "description": "Only for add_column: place the new column after this one. Omit to add it at the end."},
+                    "formula": {"type": "string", "description": "Only for add_column: calculate the new column from other columns, Excel-style, with column names in square brackets. Operators + - * / ^ and & (join text); functions ROUND, ABS, MIN, MAX, SQRT, MOD. Examples: 2*([Width]+[Height]); ROUND([Revenue]/[Units],2); [First name] & \" \" & [Last name]."},
                     "reason": {"type": "string", "description": "One-line summary of why, for the audit log."},
                 },
                 "required": ["operation", "reason"],
@@ -262,8 +264,10 @@ def execute_tool_call(name: str, arguments: dict, session: Session,
                     value=arguments.get("value"),
                     source_column=arguments.get("source_column"),
                     after_column=arguments.get("after_column"),
+                    formula=arguments.get("formula"),
                 )
-                filled = arguments.get("source_column") or arguments.get("value") not in (None, "")
+                filled = (arguments.get("source_column") or arguments.get("formula")
+                          or arguments.get("value") not in (None, ""))
                 rows_affected = len(df) if filled else 0
                 column = arguments.get("new_column", "").strip()
 

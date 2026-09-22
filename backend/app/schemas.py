@@ -91,7 +91,9 @@ class AddColumnRequest(BaseModel):
     value: str | None = None           # fill every row with this value
     source_column: str | None = None   # or copy this column
     after_column: str | None = None    # position; default is the end
+    formula: str | None = None         # or calculate it, e.g. 2*([Width]+[Height])
     reason: str | None = None
+    dry_run: bool = False              # validate and preview only; nothing is saved
 
 
 class AddColumnResponse(BaseModel):
@@ -100,6 +102,7 @@ class AddColumnResponse(BaseModel):
     current_version: int
     rows_affected: int
     excel: dict[str, Any] | None = None
+    preview: list[Any] = []
 
 
 class RevertResponse(BaseModel):

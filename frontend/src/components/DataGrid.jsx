@@ -14,7 +14,7 @@ const OVERSCAN = 10
 export default function DataGrid({
   sessionId, version, columnMeta, changedCells, highlightRows,
   query, filterColumn, missingOnly, sortBy, sortDir, onSortChange,
-  onStatsChange, onCellFocus,
+  onStatsChange, onCellFocus, revealColumn,
 }) {
   const scrollRef = useRef(null)
   const headerRef = useRef(null)
@@ -25,6 +25,17 @@ export default function DataGrid({
   const [error, setError] = useState(null)
   const [loadingChunks, setLoadingChunks] = useState(0)
   const [focusedCell, setFocusedCellLocal] = useState(null) // {rowId, col}
+
+  // Scroll a newly added column into view once it arrives from the server.
+  useEffect(() => {
+    if (!revealColumn || !scrollRef.current) return
+    const cell = scrollRef.current.parentElement?.querySelector(
+      `.grid-head-cell[data-col="${CSS.escape(revealColumn)}"]`)
+    if (!cell) return
+    const body = scrollRef.current
+    const left = cell.offsetLeft - body.clientWidth / 2 + cell.offsetWidth / 2
+    body.scrollTo({ left: Math.max(0, left), behavior: 'smooth' })
+  }, [revealColumn, columns])
 
   const chunksRef = useRef(new Map())
   const inFlightRef = useRef(new Set())
@@ -131,6 +142,7 @@ export default function DataGrid({
     return (
       <div
         key={col}
+        data-col={col}
         className={`grid-cell grid-head-cell${active ? ' sorted' : ''}`}
         onClick={() => onSortChange(col)}
         title={

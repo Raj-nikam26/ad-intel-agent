@@ -104,7 +104,7 @@ export const api = {
     })
   },
 
-  addColumn(sessionId, { name, value, sourceColumn, afterColumn }) {
+  addColumn(sessionId, { name, value, sourceColumn, afterColumn, formula, dryRun }) {
     return req('/columns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -114,6 +114,8 @@ export const api = {
         value: value || null,
         source_column: sourceColumn || null,
         after_column: afterColumn || null,
+        formula: formula || null,
+        dry_run: !!dryRun,
       }),
     })
   },

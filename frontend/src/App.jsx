@@ -69,6 +69,7 @@ export default function App({ account = null }) {
   const [uploading, setUploading] = useState(false)
   const [formulaEntry, setFormulaEntry] = useState(null)
   const [addingColumn, setAddingColumn] = useState(false)
+  const [revealColumn, setRevealColumn] = useState(null)
   const [notice, setNotice] = useState(null)
   const [restoring, setRestoring] = useState(() => {
     try { return !!localStorage.getItem(SESSION_KEY) } catch { return false }
@@ -158,6 +159,8 @@ export default function App({ account = null }) {
     setVersion(res.current_version)
     setSelectedVersion(res.current_version)
     if (res.excel) setFormulaEntry({ label: `Add column ${res.column}`, excel: res.excel })
+    setMainTab('data')
+    setRevealColumn(res.column)
     await Promise.all([loadDiff(res.current_version), refreshColumns()])
   }
 
@@ -202,6 +205,9 @@ export default function App({ account = null }) {
         setSelectedVersion(res.version)
         await Promise.all([loadDiff(res.version), refreshColumns()])
         if (!fx) { setBottomTab('history'); setBottomOpen(true) }
+        const added = [...(res.tool_calls || [])].reverse().find((t) =>
+          t.arguments?.operation === 'add_column' && t.result?.status === 'applied')
+        if (added) { setMainTab('data'); setRevealColumn(added.arguments.new_column?.trim()) }
       }
     } catch (err) {
       setError(err.message)
@@ -421,6 +427,7 @@ export default function App({ account = null }) {
                 onSortChange={onSortChange}
                 onStatsChange={setGridStats}
                 onCellFocus={setFocusedCell}
+                revealColumn={revealColumn}
               />
             ) : (
               <GraphPanel sessionId={session.session_id} version={version} />

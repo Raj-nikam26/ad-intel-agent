@@ -724,6 +724,7 @@ def add_column(request: AddColumnRequest, user: dict | None = Depends(current_us
     args = {
         "new_column": request.name, "value": request.value,
         "source_column": request.source_column or None, "after_column": request.after_column or None,
+        "formula": request.formula or None,
     }
     try:
         new_df, preview = apply_operation(df, operation="add_column", **args)
@@ -731,8 +732,14 @@ def add_column(request: AddColumnRequest, user: dict | None = Depends(current_us
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     name = request.name.strip()
-    filled = bool(args["source_column"]) or request.value not in (None, "")
-    how = (f"copy of {args['source_column']}" if args["source_column"]
+    if request.dry_run:
+        sample = [_json_safe(v) for v in new_df[name].head(5)]
+        return AddColumnResponse(status="preview", column=name, current_version=_current_version(session),
+                                 rows_affected=0, preview=sample)
+
+    filled = bool(args["source_column"] or args["formula"]) or request.value not in (None, "")
+    how = (f"= {args['formula']}" if args["formula"]
+           else f"copy of {args['source_column']}" if args["source_column"]
            else f"filled with '{request.value}'" if filled else "empty")
     excel = excel_formulas.for_edit("add_column", args, df, new_df)
     try:

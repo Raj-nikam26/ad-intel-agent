@@ -28,6 +28,8 @@ import logging
 
 import pandas as pd
 
+from app import column_formula
+
 logger = logging.getLogger("ad_intel.safe_editor")
 
 
@@ -139,11 +141,13 @@ MAX_COLUMN_NAME = 100
 
 
 def add_column(df: pd.DataFrame, new_column: str, value=None, source_column: str | None = None,
-               after_column: str | None = None) -> tuple[pd.DataFrame, list]:
-    """Adds one column. It starts empty, filled with a single fixed
-    value, or as a copy of an existing column - never computed from an
-    expression, for the same reason no other edit runs model-written
-    code. Existing columns are not touched."""
+               after_column: str | None = None, formula: str | None = None) -> tuple[pd.DataFrame, list]:
+    """Adds one column: empty, one fixed value, a copy of a column, or
+    calculated from other columns with a formula such as
+    2 * ([Width] + [Height]). Formulas are parsed and checked by
+    column_formula.py, never executed as code, so this stays within the
+    rule that no model-written code changes data. Existing columns are
+    not touched."""
     name = (new_column or "").strip()
     if not name:
         raise EditValidationError("The new column needs a name.")
@@ -151,15 +155,21 @@ def add_column(df: pd.DataFrame, new_column: str, value=None, source_column: str
         raise EditValidationError(f"Column names are limited to {MAX_COLUMN_NAME} characters.")
     if name.lower() in {str(c).strip().lower() for c in df.columns}:
         raise EditValidationError(f"A column named '{name}' already exists.")
-    if source_column and value not in (None, ""):
-        raise EditValidationError("Give either a fixed value or a column to copy, not both.")
+    given = [bool(source_column), value not in (None, ""), bool((formula or "").strip())]
+    if sum(given) > 1:
+        raise EditValidationError("Give only one of: a fixed value, a column to copy, or a formula.")
     if source_column and source_column not in df.columns:
         raise EditValidationError(f"Column '{source_column}' does not exist.")
     if after_column and after_column not in df.columns:
         raise EditValidationError(f"Column '{after_column}' does not exist.")
 
     new_df = df.copy(deep=True)
-    if source_column:
+    if (formula or "").strip():
+        try:
+            data = column_formula.evaluate(formula, new_df)
+        except column_formula.FormulaError as e:
+            raise EditValidationError(str(e)) from e
+    elif source_column:
         data = new_df[source_column].copy()
     elif value not in (None, ""):
         data = pd.Series([value] * len(new_df), index=new_df.index, dtype=object)

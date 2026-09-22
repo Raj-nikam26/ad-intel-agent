@@ -127,7 +127,7 @@ def test_add_column_copied_from_another():
 @pytest.mark.parametrize("kwargs, message", [
     ({"new_column": "  "}, "needs a name"),
     ({"new_column": "city"}, "already exists"),
-    ({"new_column": "X", "value": "a", "source_column": "City"}, "not both"),
+    ({"new_column": "X", "value": "a", "source_column": "City"}, "only one of"),
     ({"new_column": "X", "source_column": "Nope"}, "does not exist"),
     ({"new_column": "X", "after_column": "Nope"}, "does not exist"),
 ])
@@ -167,3 +167,57 @@ def test_upload_reports_where_table_was_found():
     body = r.json()
     assert body["columns"] == ["Name", "City", "Amount"]
     assert "B3" in body["notice"]
+
+
+# ------------------------------------------------------------------ calculated columns
+
+SHAPES = pd.DataFrame({"Name": ["a", "b", "c"], "Width": [2, 3, None], "Height": [5, 4, 1]})
+
+
+def test_formula_column_perimeter():
+    new, _ = add_column(SHAPES, "Perimeter", formula="2*([Width]+[Height])", after_column="Height")
+    assert list(new.columns) == ["Name", "Width", "Height", "Perimeter"]
+    assert new["Perimeter"].tolist()[:2] == [14, 14]
+    assert new["Perimeter"].tolist()[2] is None            # blank input -> blank result
+
+
+def test_formula_bare_names_case_insensitive():
+    new, _ = add_column(SHAPES, "Area", formula="width * HEIGHT")
+    assert new["Area"].tolist()[:2] == [10, 12]
+
+
+@pytest.mark.parametrize("formula", [
+    '__import__("os").system("x")', "Width.real", "open('f')", "(lambda: 1)()",
+    "[Width] if 1 else 2", "[Nope] + 1", "Depth * 2", "=",
+])
+def test_formula_refuses_unsafe_or_unknown(formula):
+    with pytest.raises(EditValidationError):
+        add_column(SHAPES, "X", formula=formula)
+
+
+def test_formula_excel_translation():
+    from app.column_formula import to_excel
+    after, _ = add_column(SHAPES, "Perimeter", formula="2*([Width]+[Height])")
+    letter = {c: chr(65 + i) for i, c in enumerate(after.columns)}
+    assert to_excel("2*([Width]+[Height])", after, letter.get) == "=2*(B2+C2)"
+    assert to_excel('ROUND(Width/Height, 2) & " cm"', after, letter.get) == '=ROUND(B2/C2,2)&" cm"'
+
+
+def test_columns_endpoint_formula_preview_then_save():
+    rows = [["Name", "Width", "Height"], ["a", 2, 5], ["b", 3, 4]]
+    session_id = client.post("/upload", files={"file": ("s.xlsx", _xlsx(rows),
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}).json()["session_id"]
+    body = {"session_id": session_id, "name": "Perimeter", "formula": "2*([Width]+[Height])"}
+
+    preview = client.post("/columns", json={**body, "dry_run": True}).json()
+    assert preview["status"] == "preview" and preview["preview"] == [14, 14]
+    assert preview["current_version"] == 0                   # nothing saved
+
+    saved = client.post("/columns", json=body).json()
+    assert saved["current_version"] == 1
+    assert saved["excel"]["items"][0]["formulas"][0]["formula"] == "=2*(B2+C2)"
+    page = client.get(f"/data/{session_id}").json()
+    assert [r["Perimeter"] for r in page["rows"]] == [14, 14]
+
+    bad = client.post("/columns", json={**body, "name": "P2", "formula": "[Depth]*2"})
+    assert bad.status_code == 400 and "Depth" in bad.json()["detail"]
